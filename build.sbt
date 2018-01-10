@@ -29,7 +29,6 @@ lazy val server = (project in file("server"))
     libraryDependencies ++= commonDependencies ++ Seq(
       deps.logback,
       deps.kSim % "test"
-      //deps.kTest % "test"
     )
   )
   .dependsOn(
@@ -59,8 +58,8 @@ lazy val deps =
     val logbackV        = "1.2.3"
     val scalaLoggingV   = "3.7.2"
     val scalatestV      = "3.0.4"
-    val kompicsV        = "1.0.0-SNAPSHOT"
-    val commonUtilsV    = "2.0-SNAPSHOT"
+    val kompicsV        = "1.0.0"
+    val commonUtilsV    = "2.0.0"
     val scallopV        = "3.1.1"
     val jlineV          = "3.5.1"
     val log4jV          = "1.2.17"
@@ -76,7 +75,6 @@ lazy val deps =
     val kTimer         = "se.sics.kompics.basic"      %  "kompics-port-timer"              % kompicsV
     val javaTimer      = "se.sics.kompics.basic"      %  "kompics-component-java-timer"    % kompicsV
     val kSim           = "se.sics.kompics"            %% "kompics-scala-simulator"         % kompicsV
-    val kTest          = "se.sics.kompics.testing"    %  "kompics-testing"                 % kompicsV
     val commonUtils    = "com.larskroll"              %% "common-utils-scala"              % commonUtilsV
     val scallop        = "org.rogach"                 %% "scallop"                         % scallopV
     val jline          = "org.jline"                  %  "jline"                           % jlineV
