@@ -23,12 +23,13 @@
  */
 package se.kth.id2203.overlay;
 
-import se.kth.id2203.bootstrapping._;
-import se.kth.id2203.networking._;
-import se.sics.kompics.sl._;
-import se.sics.kompics.network.Network;
-import se.sics.kompics.timer.Timer;
-import util.Random;
+import se.kth.id2203.bootstrapping._
+import se.kth.id2203.networking._
+import se.sics.kompics.sl._
+import se.sics.kompics.network.Network
+import se.sics.kompics.timer.Timer
+
+import scala.util.Random;
 
 /**
  * The V(ery)S(imple)OverlayManager.
@@ -43,56 +44,60 @@ import util.Random;
 class VSOverlayManager extends ComponentDefinition {
 
   //******* Ports ******
-  val route = provides(Routing);
-  val boot = requires(Bootstrapping);
-  val net = requires[Network];
-  val timer = requires[Timer];
+  val route = provides(Routing)
+  val boot = requires(Bootstrapping)
+  val net = requires[Network]
+  val timer = requires[Timer]
   //******* Fields ******
-  val self = cfg.getValue[NetAddress]("id2203.project.address");
-  private var lut: Option[LookupTable] = None;
+  val self = cfg.getValue[NetAddress]("id2203.project.address")
+  val replicationDegree = cfg.getValue[Int]("id2203.project.replicationDegree")
+  val keyRange = cfg.getValue[Int]("id2203.project.keySpaceRange")
+  private var lut: Option[LookupTable] = None
+
   //******* Handlers ******
   boot uponEvent {
     case GetInitialAssignments(nodes) => handle {
-      log.info("Generating LookupTable...");
-      val lut = LookupTable.generate(nodes);
-      logger.debug("Generated assignments:\n$lut");
-      trigger (new InitialAssignments(lut) -> boot);
+      log.info("Generating LookupTable...")
+      //val lut = LookupTable.generate(nodes)
+      val lut = LookupTable.generate(keyRange, replicationDegree, nodes)
+      logger.debug("Generated assignments:\n$lut")
+      trigger (new InitialAssignments(lut) -> boot)
     }
     case Booted(assignment: LookupTable) => handle {
-      log.info("Got NodeAssignment, overlay ready.");
-      lut = Some(assignment);
+      log.info("Got NodeAssignment, overlay ready.")
+      lut = Some(assignment)
     }
   }
 
   net uponEvent {
     case NetMessage(header, RouteMsg(key, msg)) => handle {
-      val nodes = lut.get.lookup(key);
-      assert(!nodes.isEmpty);
-      val i = Random.nextInt(nodes.size);
-      val target = nodes.drop(i).head;
-      log.info(s"Forwarding message for key $key to $target");
-      trigger(NetMessage(header.src, target, msg) -> net);
+      val nodes = lut.get.lookup(key)
+      assert(!nodes.isEmpty)
+      val i = Random.nextInt(nodes.size)
+      val target = nodes.drop(i).head
+      log.info(s"Forwarding message for key $key to $target")
+      trigger(NetMessage(header.src, target, msg) -> net)
     }
     case NetMessage(header, msg: Connect) => handle {
       lut match {
         case Some(l) => {
-          log.debug("Accepting connection request from ${header.src}");
+          log.debug("Accepting connection request from ${header.src}")
           val size = l.getNodes().size;
-          trigger (NetMessage(self, header.src, msg.ack(size)) -> net);
+          trigger (NetMessage(self, header.src, msg.ack(size)) -> net)
         }
-        case None => log.info("Rejecting connection request from ${header.src}, as system is not ready, yet.");
+        case None => log.info("Rejecting connection request from ${header.src}, as system is not ready, yet.")
       }
     }
   }
 
   route uponEvent {
     case RouteMsg(key, msg) => handle {
-      val nodes = lut.get.lookup(key);
-      assert(!nodes.isEmpty);
-      val i = Random.nextInt(nodes.size);
-      val target = nodes.drop(i).head;
-      log.info(s"Routing message for key $key to $target");
-      trigger (NetMessage(self, target, msg) -> net);
+      val nodes = lut.get.lookup(key)
+      assert(!nodes.isEmpty)
+      val i = Random.nextInt(nodes.size)
+      val target = nodes.drop(i).head
+      log.info(s"Routing message for key $key to $target")
+      trigger (NetMessage(self, target, msg) -> net)
     }
   }
 }
