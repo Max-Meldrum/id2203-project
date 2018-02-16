@@ -60,7 +60,7 @@ class VSOverlayManager extends ComponentDefinition {
       log.info("Generating LookupTable...")
       //val lut = LookupTable.generate(nodes)
       val lut = LookupTable.generate(keyRange, replicationDegree, nodes)
-      logger.debug("Generated assignments:\n$lut")
+      logger.debug(s"Generated assignments:\n${lut}")
       trigger (new InitialAssignments(lut) -> boot)
     }
     case Booted(assignment: LookupTable) => handle {
@@ -72,6 +72,7 @@ class VSOverlayManager extends ComponentDefinition {
   net uponEvent {
     case NetMessage(header, RouteMsg(key, msg)) => handle {
       val nodes = lut.get.lookup(key)
+      logger.debug(s"Got nodes from lookup!:\n${nodes}")
       assert(!nodes.isEmpty)
       val i = Random.nextInt(nodes.size)
       val target = nodes.drop(i).head
