@@ -23,10 +23,9 @@
  */
 package se.kth.id2203.overlay;
 
-import se.kth.id2203.bootstrapping.BootstrapServer.{Collecting, State}
 import se.kth.id2203.bootstrapping._
 import se.kth.id2203.networking._
-import se.kth.id2203.overlay.VSOverlayManager.{Backup, Primary, Status}
+import se.kth.id2203.overlay.VSOverlayManager.{Backup, Inactive, Primary, Status}
 import se.sics.kompics.sl._
 import se.sics.kompics.network.Network
 import se.sics.kompics.timer.Timer
@@ -55,9 +54,9 @@ class VSOverlayManager extends ComponentDefinition {
   val replicationDegree = cfg.getValue[Int]("id2203.project.replicationDegree")
   val keyRange = cfg.getValue[Int]("id2203.project.keySpaceRange")
 
-  // Set initial replica status to backup
+  // Set initial replica status to Inactive
   // Primary status will be set through LE
-  private var status: Status = Backup
+  private var status: Status = Inactive
   private var lut: Option[LookupTable] = None
 
   //******* Handlers ******
@@ -88,13 +87,30 @@ class VSOverlayManager extends ComponentDefinition {
 
   net uponEvent {
     case NetMessage(header, RouteMsg(key, msg)) => handle {
-      val nodes = lut.get.lookup(key)
-      logger.debug(s"Got nodes from lookup!:\n${nodes}")
+      val nodes = lut.get
+        .lookup(key)
+        .toList
+
       assert(!nodes.isEmpty)
-      val i = Random.nextInt(nodes.size)
-      val target = nodes.drop(i).head
-      log.info(s"Forwarding message for key $key to $target")
-      trigger(NetMessage(header.src, target, msg) -> net)
+
+      logger.debug(s"Got nodes from lookup!:\n$nodes")
+
+      if (nodes.contains(self)) {
+        status match {
+          case Primary =>
+            log.info("Primary got the request...")
+            trigger(NetMessage(header.src, self, msg) -> net)
+          case Backup =>
+            log.info("Backup forwarding to primary")
+            trigger(NetMessage(header.src, nodes.head, RouteMsg(key, msg)) -> net)
+          case Inactive =>
+            log.info(s"$self has an inactive status")
+        }
+      } else {
+        val target = nodes.head
+        log.info(s"Forwarding message for key $key to $target")
+        trigger(NetMessage(header.src, target, msg) -> net)
+      }
     }
     case NetMessage(header, msg: Connect) => handle {
       lut match {
@@ -124,4 +140,5 @@ object VSOverlayManager {
   sealed trait Status
   case object Primary extends Status
   case object Backup extends Status
+  case object Inactive extends Status
 }
