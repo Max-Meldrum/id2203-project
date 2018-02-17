@@ -23,8 +23,10 @@
  */
 package se.kth.id2203.overlay;
 
+import se.kth.id2203.bootstrapping.BootstrapServer.{Collecting, State}
 import se.kth.id2203.bootstrapping._
 import se.kth.id2203.networking._
+import se.kth.id2203.overlay.VSOverlayManager.{Backup, Primary, Status}
 import se.sics.kompics.sl._
 import se.sics.kompics.network.Network
 import se.sics.kompics.timer.Timer
@@ -52,6 +54,10 @@ class VSOverlayManager extends ComponentDefinition {
   val self = cfg.getValue[NetAddress]("id2203.project.address")
   val replicationDegree = cfg.getValue[Int]("id2203.project.replicationDegree")
   val keyRange = cfg.getValue[Int]("id2203.project.keySpaceRange")
+
+  // Set initial replica status to backup
+  // Primary status will be set through LE
+  private var status: Status = Backup
   private var lut: Option[LookupTable] = None
 
   //******* Handlers ******
@@ -60,12 +66,23 @@ class VSOverlayManager extends ComponentDefinition {
       log.info("Generating LookupTable...")
       //val lut = LookupTable.generate(nodes)
       val lut = LookupTable.generate(keyRange, replicationDegree, nodes)
-      logger.debug(s"Generated assignments:\n${lut}")
+      logger.debug(s"Generated assignments:\n$lut")
       trigger (new InitialAssignments(lut) -> boot)
     }
     case Booted(assignment: LookupTable) => handle {
       log.info("Got NodeAssignment, overlay ready.")
       lut = Some(assignment)
+      val group = lut.get.getReplicationGroup(self)
+      val isLeader = group.headOption
+        .map(_.sameHostAs(self))
+        .head
+
+      if (isLeader) {
+        log.info(s"I am leader $self for group $group")
+        status = Primary
+      } else {
+        status = Backup
+      }
     }
   }
 
@@ -101,4 +118,10 @@ class VSOverlayManager extends ComponentDefinition {
       trigger (NetMessage(self, target, msg) -> net)
     }
   }
+}
+
+object VSOverlayManager {
+  sealed trait Status
+  case object Primary extends Status
+  case object Backup extends Status
 }

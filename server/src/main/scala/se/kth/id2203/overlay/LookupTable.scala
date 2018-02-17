@@ -54,7 +54,6 @@ class LookupTable extends NodeAssignment with Serializable {
       case x if x < 0 => getPartitionNumber(Math.abs(x))
       case x => getPartitionNumber(x)
     }
-    println(s"PARTITION NUMBER: ${partition}")
     partitions(partition)
   }
 
@@ -71,6 +70,17 @@ class LookupTable extends NodeAssignment with Serializable {
 
   def getNodes(): Set[NetAddress] = partitions.foldLeft(Set.empty[NetAddress]) {
     case (acc, kv) => acc ++ kv._2
+  }
+
+  def getReplicationGroup(self: NetAddress): Set[NetAddress] = {
+    partitions.foldLeft(Set.empty[NetAddress]) {
+      case (acc, kv) => {
+        if (kv._2.exists(_.sameHostAs(self)))
+          acc ++ kv._2
+        else
+          acc
+      }
+    }
   }
 
   override def toString(): String = {
