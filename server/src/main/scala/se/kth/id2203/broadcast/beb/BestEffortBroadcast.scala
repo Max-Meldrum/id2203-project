@@ -15,7 +15,7 @@ class BestEffortBroadcast {
 
     bestEffortBroadcast uponEvent {
       case request: BestEffortBroadcastRequest => handle {
-        request.addresses.foreach(address => trigger(NetMessage(self, address, BestEffortBroadcastMessage(self, request.event)), net))
+        request.addresses.foreach(address => trigger(NetMessage(self, address, BestEffortBroadcastMessage(self, request.event)),net))
       }
     }
 
