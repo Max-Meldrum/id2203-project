@@ -23,7 +23,8 @@
  */
 package se.kth.id2203.kvstore
 
-import java.util.UUID;
+import java.util.UUID
+
 import se.sics.kompics.KompicsEvent;
 
 trait Operation extends KompicsEvent {
@@ -31,9 +32,16 @@ trait Operation extends KompicsEvent {
   def key: String;
 }
 
+sealed trait Command
+case object GET extends Command
+case object PUT extends Command
+case object CAS extends Command
+
 @SerialVersionUID(0xfacc6612da2139eaL)
-case class Op(key: String, id: UUID = UUID.randomUUID()) extends Operation with Serializable {
-  def response(status: OpCode.OpCode): OpResponse = OpResponse(id, status);
+case class Op(command: Command, key: String, value: Option[String] = None, id: UUID = UUID.randomUUID())
+  extends Operation with Serializable {
+  def response(status: OpCode.OpCode): OpResponse = OpResponse(None, id, status);
+  def response(res: String, status: OpCode.OpCode): OpResponse = OpResponse(Some(res), id, status)
 }
 
 object OpCode {
@@ -41,6 +49,7 @@ object OpCode {
   case object Ok extends OpCode;
   case object NotFound extends OpCode;
   case object NotImplemented extends OpCode;
+  case object Error extends OpCode;
 }
 
 trait OperationResponse extends KompicsEvent {
@@ -49,4 +58,5 @@ trait OperationResponse extends KompicsEvent {
 }
 
 @SerialVersionUID(0x0227a2aea45e5e75L)
-case class OpResponse(id: UUID, status: OpCode.OpCode) extends OperationResponse with Serializable;
+case class OpResponse(result: Option[String] = None, id: UUID, status: OpCode.OpCode)
+  extends OperationResponse with Serializable

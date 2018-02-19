@@ -38,13 +38,25 @@ class KVService extends ComponentDefinition {
   //******* Fields ******
   val self = cfg.getValue[NetAddress]("id2203.project.address");
   val store = new mutable.HashMap[String,String]
+
+  // For testing purposes
+  store.put("unit_test", "kth")
+
   //******* Handlers ******
   net uponEvent {
     case NetMessage(header, op: Op) => handle {
-      log.info("Got operation {}! Now implement me please :)", op)
-      //TODO: GET/PUT/CAS
+      op.command match {
+        case GET =>
+          trigger(NetMessage(self, header.src, op.response(store.getOrElse(op.key, ""), OpCode.Ok)) -> net)
+        case PUT =>
+          if (op.value.isDefined)
+            trigger(NetMessage(self, header.src, op.response(store.put(op.key, op.value.get).getOrElse(""), OpCode.Ok)) -> net)
+          else
+            trigger(NetMessage(self, header.src, op.response(OpCode.Error)) -> net)
+        case CAS =>
+          trigger(NetMessage(self, header.src, op.response(OpCode.NotImplemented)) -> net)
 
-      trigger(NetMessage(self, header.src, op.response(OpCode.NotImplemented)) -> net)
+      }
     }
   }
 }

@@ -37,7 +37,8 @@ import scala.concurrent.duration._
 
 class OpsTest extends FlatSpec with Matchers {
 
-  private val nMessages = 10;
+  private val nMessages = 10
+  private val clusterSize = 9
 
   //  "Classloader" should "be something" in {
   //    val cname = classOf[SimulationResultSingleton].getCanonicalName();
@@ -56,16 +57,15 @@ class OpsTest extends FlatSpec with Matchers {
   //    }
   //  }
 
-  "Simple Operations" should "not be implemented" in { // well of course eventually they should be implemented^^
-    val seed = 123l;
-    JSimulationScenario.setSeed(seed);
-    val simpleBootScenario = SimpleScenario.scenario(9);
-    val res = SimulationResultSingleton.getInstance();
-    SimulationResult += ("messages" -> nMessages);
-    simpleBootScenario.simulate(classOf[LauncherComp]);
+  "GET operation" should "be implemented" in {
+    val seed = 123l
+    JSimulationScenario.setSeed(seed)
+    val simpleBootScenario = SimpleScenario.scenario(clusterSize)
+    val res = SimulationResultSingleton.getInstance()
+    SimulationResult += ("messages" -> nMessages)
+    simpleBootScenario.simulate(classOf[LauncherComp])
     for (i <- 0 to nMessages) {
-      SimulationResult.get[String](s"daha$i") should be (Some("NotImplemented"));
-      // of course the correct response should be Success not NotImplemented, but like this the test passes
+      SimulationResult.get[String](s"unit_test") should be (Some("kth"))
     }
   }
 
