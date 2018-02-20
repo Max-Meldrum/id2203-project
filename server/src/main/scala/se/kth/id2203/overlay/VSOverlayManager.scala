@@ -24,6 +24,7 @@
 package se.kth.id2203.overlay;
 
 import se.kth.id2203.bootstrapping._
+import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastMessage, BestEffortBroadcastPort, BestEffortBroadcastRequest}
 import se.kth.id2203.networking._
 import se.kth.id2203.overlay.VSOverlayManager.{Backup, Inactive, Primary, Status}
 import se.sics.kompics.sl._
@@ -49,6 +50,7 @@ class VSOverlayManager extends ComponentDefinition {
   val boot = requires(Bootstrapping)
   val net = requires[Network]
   val timer = requires[Timer]
+  val beb = requires[BestEffortBroadcastPort]
   //******* Fields ******
   val self = cfg.getValue[NetAddress]("id2203.project.address")
   val replicationDegree = cfg.getValue[Int]("id2203.project.replicationDegree")
@@ -92,6 +94,7 @@ class VSOverlayManager extends ComponentDefinition {
         .toList
 
       assert(!nodes.isEmpty)
+      val target = nodes.head
 
       logger.debug(s"Got nodes from lookup!:\n$nodes")
 
@@ -99,15 +102,18 @@ class VSOverlayManager extends ComponentDefinition {
         status match {
           case Primary =>
             log.info("Primary got the request...")
+            //TODO: Do a broadcast to the backups, get response from a majority, including itself..
+            // Just a simple BEB request right now.
+            trigger(BestEffortBroadcastRequest(msg, nodes) -> beb)
+            // Then send it to the KVService..
             trigger(NetMessage(header.src, self, msg) -> net)
           case Backup =>
             log.info("Backup forwarding to primary")
-            trigger(NetMessage(header.src, nodes.head, RouteMsg(key, msg)) -> net)
+            trigger(NetMessage(header.src, target, RouteMsg(key, msg)) -> net)
           case Inactive =>
             log.info(s"$self has an inactive status")
         }
       } else {
-        val target = nodes.head
         log.info(s"Forwarding message for key $key to $target")
         trigger(NetMessage(header.src, target, msg) -> net)
       }

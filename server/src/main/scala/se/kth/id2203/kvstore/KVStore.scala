@@ -55,7 +55,6 @@ class KVService extends ComponentDefinition {
             trigger(NetMessage(self, header.src, op.response(OpCode.Error)) -> net)
         case CAS =>
           trigger(NetMessage(self, header.src, op.response(OpCode.NotImplemented)) -> net)
-
       }
     }
   }

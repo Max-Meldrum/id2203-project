@@ -24,35 +24,43 @@
 package se.kth.id2203;
 
 import se.kth.id2203.bootstrapping._
-import se.kth.id2203.kvstore.KVService;
-import se.kth.id2203.networking.NetAddress;
+import se.kth.id2203.broadcast.beb.{BestEffortBroadcast, BestEffortBroadcastPort}
+import se.kth.id2203.kvstore.KVService
+import se.kth.id2203.networking.NetAddress
 import se.kth.id2203.overlay._
 import se.sics.kompics.sl._
-import se.sics.kompics.Init;
-import se.sics.kompics.network.Network;
+import se.sics.kompics.{Channel, Component, Init}
+import se.sics.kompics.network.Network
 import se.sics.kompics.timer.Timer;
 
 class ParentComponent extends ComponentDefinition {
 
   //******* Ports ******
-  val net = requires[Network];
-  val timer = requires[Timer];
+  val net: PositivePort[Network] = requires[Network]
+  val timer = requires[Timer]
   //******* Children ******
-  val overlay = create(classOf[VSOverlayManager], Init.NONE);
-  val kv = create(classOf[KVService], Init.NONE);
+  val overlay = create(classOf[VSOverlayManager], Init.NONE)
+  val kv = create(classOf[KVService], Init.NONE)
+  val beb: Component = create(classOf[BestEffortBroadcast], Init.NONE)
+
   val boot = cfg.readValue[NetAddress]("id2203.project.bootstrap-address") match {
     case Some(_) => create(classOf[BootstrapClient], Init.NONE); // start in client mode
     case None    => create(classOf[BootstrapServer], Init.NONE); // start in server mode
   }
 
   {
-    connect[Timer](timer -> boot);
-    connect[Network](net -> boot);
+    connect[Timer](timer -> boot)
+    connect[Network](net -> boot)
     // Overlay
-    connect(Bootstrapping)(boot -> overlay);
-    connect[Network](net -> overlay);
+    connect(Bootstrapping)(boot -> overlay)
+    connect[Network](net -> overlay)
     // KV
-    connect(Routing)(overlay -> kv);
-    connect[Network](net -> kv);
+    connect(Routing)(overlay -> kv)
+    connect[Network](net -> kv)
+    // BEB
+    //TODO: Change this to look more like above?
+    connect(net, beb.getNegative(classOf[Network]), Channel.TWO_WAY)
+    connect(beb.getPositive(classOf[BestEffortBroadcastPort]), overlay.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
+
   }
 }

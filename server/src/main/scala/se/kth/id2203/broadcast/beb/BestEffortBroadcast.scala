@@ -1,12 +1,12 @@
 package se.kth.id2203.broadcast.beb
 
-class BestEffortBroadcast {
-  import org.slf4j.LoggerFactory
-  import se.kth.id2203.networking.{NetMessage,NetAddress}
-  import se.sics.kompics.network.Network
-  import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
+import org.slf4j.LoggerFactory
+import se.kth.id2203.networking.{NetMessage,NetAddress}
+import se.sics.kompics.network.Network
+import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
 
-  class BestEffortBroadcast extends ComponentDefinition {
+
+class BestEffortBroadcast extends ComponentDefinition {
     private val LOG = LoggerFactory.getLogger(classOf[BestEffortBroadcast])
 
     private val bestEffortBroadcast: NegativePort[BestEffortBroadcastPort] = provides[BestEffortBroadcastPort]
@@ -24,5 +24,4 @@ class BestEffortBroadcast {
         trigger(BestEffortBroadcastDeliver(payload.src, payload.event), bestEffortBroadcast)
       }
     }
-  }
 }
