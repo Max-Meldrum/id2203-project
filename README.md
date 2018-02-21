@@ -3,6 +3,20 @@
 This project contains some code to get you started with the project.
 You are encouraged to create your own forks and work on them, modifying everything and anything as you desire it.
 
+## Tasks
+
+- [x] Fix partitions and split into replication groups
+- [x] Set up static Primary and backups
+- [x] Enable BEB broadcast
+- [x] Set up GET unit tests
+- [ ] Total order broadcast
+- [ ] Create consensus component which total order broadcasts and waits for majority before responding to client.
+- [ ] Create unit tests for PUT
+- [ ] Make backups send heartbeats to primary to ensure we have quorum
+- [ ] Leader election after a crash
+- [ ] Implement CAS
+- [ ] Bonus?
+
 ## Overview
 
 The project is split into 3 sub parts:
