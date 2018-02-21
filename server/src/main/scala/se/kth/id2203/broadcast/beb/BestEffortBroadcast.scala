@@ -7,11 +7,10 @@ import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, hand
 
 
 class BestEffortBroadcast extends ComponentDefinition {
-    private val LOG = LoggerFactory.getLogger(classOf[BestEffortBroadcast])
 
-    private val bestEffortBroadcast: NegativePort[BestEffortBroadcastPort] = provides[BestEffortBroadcastPort]
-    private val net: PositivePort[Network] = requires[Network]
-    private val self = config.getValue("id2203.project.address", classOf[NetAddress])
+  private val bestEffortBroadcast: NegativePort[BestEffortBroadcastPort] = provides[BestEffortBroadcastPort]
+  private val net: PositivePort[Network] = requires[Network]
+  private val self = config.getValue("id2203.project.address", classOf[NetAddress])
 
     bestEffortBroadcast uponEvent {
       case request: BestEffortBroadcastRequest => handle {
