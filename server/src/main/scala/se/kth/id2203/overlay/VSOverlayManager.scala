@@ -24,7 +24,9 @@
 package se.kth.id2203.overlay;
 
 import se.kth.id2203.bootstrapping._
+import se.kth.id2203.broadcast.AtomicBroadcastRequest
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastMessage, BestEffortBroadcastPort, BestEffortBroadcastRequest}
+import se.kth.id2203.kvstore._
 import se.kth.id2203.networking._
 import se.kth.id2203.overlay.VSOverlayManager.{Backup, Inactive, Primary, Status}
 import se.sics.kompics.sl._
@@ -60,6 +62,8 @@ class VSOverlayManager extends ComponentDefinition {
   // Primary status will be set through LE
   private var status: Status = Inactive
   private var lut: Option[LookupTable] = None
+  // Current epoch, gets increased with new leader..
+  private var epoch = 0
 
   //******* Handlers ******
   boot uponEvent {
@@ -102,14 +106,48 @@ class VSOverlayManager extends ComponentDefinition {
         status match {
           case Primary =>
             log.info("Primary got the request...")
-            //TODO: Do a broadcast to the backups, get response from a majority, including itself..
-            // Just a simple BEB request right now.
-            trigger(BestEffortBroadcastRequest(msg, nodes) -> beb)
-            // Then send it to the KVService..
-            trigger(NetMessage(header.src, self, msg) -> net)
+            msg match {
+              case (op: Op) => {
+                op.command match {
+                  case GET =>
+                    // We assume eventual consistency, read value without contacting quorum..
+                    // send request directly to KVStore
+                    trigger(NetMessage(header.src, self, msg) -> net)
+                  case PUT =>
+                    // Blast proposal..
+                    // AtomicBroadcast..
+                    trigger(BestEffortBroadcastRequest(msg, nodes) -> beb)
+                  case CAS =>
+                  // Not impl
+                  case _ =>
+                    log.error(s"Primary $self received unknown operation")
+                }
+
+              }
+              case _ =>
+                log.error(s"Primary $self received unkown NetMessage")
+            }
           case Backup =>
-            log.info("Backup forwarding to primary")
-            trigger(NetMessage(header.src, target, RouteMsg(key, msg)) -> net)
+            msg match {
+              case (op: Op) => {
+                op.command match {
+                  case GET =>
+                    // We assume eventual consistency as a basis, read value without contacting quorum..
+                    // send request directly to KVStore
+                    trigger(NetMessage(header.src, self, msg) -> net)
+                  case PUT =>
+                    // Proposal request, forward it to the primary
+                    log.info(s"Backup $self forwarding proposal request to primary")
+                    trigger(NetMessage(header.src, target, RouteMsg(key, msg)) -> net)
+                  case CAS =>
+                  // Not impl
+                  case _ =>
+                    log.error(s"Backup $self received unknown operation")
+                }
+              }
+              case _ =>
+                log.error(s"Backup $self received unknown NetMessage")
+            }
           case Inactive =>
             log.info(s"$self has an inactive status")
         }
