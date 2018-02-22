@@ -49,10 +49,7 @@ class KVService extends ComponentDefinition {
         case GET =>
           trigger(NetMessage(self, header.src, op.response(store.getOrElse(op.key, ""), OpCode.Ok)) -> net)
         case PUT =>
-          if (op.value.isDefined)
-            trigger(NetMessage(self, header.src, op.response(store.put(op.key, op.value.get).getOrElse(""), OpCode.Ok)) -> net)
-          else
-            trigger(NetMessage(self, header.src, op.response(OpCode.Error)) -> net)
+          trigger(NetMessage(self, header.src, op.response(store.put(op.key, op.value.getOrElse("")).getOrElse(""), OpCode.Ok)) -> net)
         case CAS =>
           trigger(NetMessage(self, header.src, op.response(OpCode.NotImplemented)) -> net)
       }

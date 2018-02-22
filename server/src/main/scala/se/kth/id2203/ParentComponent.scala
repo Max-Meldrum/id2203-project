@@ -24,6 +24,7 @@
 package se.kth.id2203;
 
 import se.kth.id2203.bootstrapping._
+import se.kth.id2203.broadcast.{AtomicBroadcast, AtomicBroadcastPort}
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcast, BestEffortBroadcastPort}
 import se.kth.id2203.kvstore.KVService
 import se.kth.id2203.networking.NetAddress
@@ -42,6 +43,8 @@ class ParentComponent extends ComponentDefinition {
   val overlay = create(classOf[VSOverlayManager], Init.NONE)
   val kv = create(classOf[KVService], Init.NONE)
   val beb: Component = create(classOf[BestEffortBroadcast], Init.NONE)
+  val atomicBroadcast: Component = create(classOf[AtomicBroadcast], Init.NONE)
+
 
   val boot = cfg.readValue[NetAddress]("id2203.project.bootstrap-address") match {
     case Some(_) => create(classOf[BootstrapClient], Init.NONE); // start in client mode
@@ -58,9 +61,9 @@ class ParentComponent extends ComponentDefinition {
     connect(Routing)(overlay -> kv)
     connect[Network](net -> kv)
     // BEB
-    //TODO: Change this to look more like above?
     connect(net, beb.getNegative(classOf[Network]), Channel.TWO_WAY)
-    connect(beb.getPositive(classOf[BestEffortBroadcastPort]), overlay.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
-
+    // AtomicBroadcast
+    connect(atomicBroadcast.getPositive(classOf[AtomicBroadcastPort]), overlay.getNegative(classOf[AtomicBroadcastPort]), Channel.TWO_WAY)
+    connect(beb.getPositive(classOf[BestEffortBroadcastPort]), atomicBroadcast.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
   }
 }

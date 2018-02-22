@@ -24,7 +24,7 @@
 package se.kth.id2203.overlay;
 
 import se.kth.id2203.bootstrapping._
-import se.kth.id2203.broadcast.AtomicBroadcastRequest
+import se.kth.id2203.broadcast.{AtomicBroadcastPort, AtomicBroadcastRequest}
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastMessage, BestEffortBroadcastPort, BestEffortBroadcastRequest}
 import se.kth.id2203.kvstore._
 import se.kth.id2203.networking._
@@ -52,7 +52,7 @@ class VSOverlayManager extends ComponentDefinition {
   val boot = requires(Bootstrapping)
   val net = requires[Network]
   val timer = requires[Timer]
-  val beb = requires[BestEffortBroadcastPort]
+  val atomicBroadcast = requires[AtomicBroadcastPort]
   //******* Fields ******
   val self = cfg.getValue[NetAddress]("id2203.project.address")
   val replicationDegree = cfg.getValue[Int]("id2203.project.replicationDegree")
@@ -62,6 +62,7 @@ class VSOverlayManager extends ComponentDefinition {
   // Primary status will be set through LE
   private var status: Status = Inactive
   private var lut: Option[LookupTable] = None
+
   // Current epoch, gets increased with new leader..
   private var epoch = 0
 
@@ -97,7 +98,7 @@ class VSOverlayManager extends ComponentDefinition {
         .lookup(key)
         .toList
 
-      assert(!nodes.isEmpty)
+      assert(nodes.nonEmpty)
       val target = nodes.head
 
       logger.debug(s"Got nodes from lookup!:\n$nodes")
@@ -114,9 +115,8 @@ class VSOverlayManager extends ComponentDefinition {
                     // send request directly to KVStore
                     trigger(NetMessage(header.src, self, msg) -> net)
                   case PUT =>
-                    // Blast proposal..
-                    // AtomicBroadcast..
-                    trigger(BestEffortBroadcastRequest(msg, nodes) -> beb)
+                    // Blast proposals
+                    trigger(AtomicBroadcastRequest(epoch, msg, nodes) -> atomicBroadcast)
                   case CAS =>
                   // Not impl
                   case _ =>
@@ -125,16 +125,18 @@ class VSOverlayManager extends ComponentDefinition {
 
               }
               case _ =>
-                log.error(s"Primary $self received unkown NetMessage")
+                log.error(s"Primary $self received unknown NetMessage")
             }
           case Backup =>
             msg match {
               case (op: Op) => {
                 op.command match {
                   case GET =>
-                    // We assume eventual consistency as a basis, read value without contacting quorum..
+                    // We assume eventual consistency, read value without contacting quorum..
                     // send request directly to KVStore
-                    trigger(NetMessage(header.src, self, msg) -> net)
+                    //trigger(NetMessage(header.src, self, msg) -> net)
+                    // But for now forward to primary
+                    trigger(NetMessage(header.src, target, RouteMsg(key, msg)) -> net)
                   case PUT =>
                     // Proposal request, forward it to the primary
                     log.info(s"Backup $self forwarding proposal request to primary")
