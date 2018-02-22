@@ -2,9 +2,7 @@ package se.kth.id2203.broadcast.rb
 
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastPort}
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
-import se.sics.kompics.network.Network
-import se.kth.id2203.networking.{NetAddress, NetMessage}
-import se.kth.id2203.broadcast.rb.ReliableBroadcastMessage
+import se.kth.id2203.networking.{NetAddress}
 
 class ReliableBroadcast extends ComponentDefinition{
   private val bestEffortBroadcast: PositivePort[BestEffortBroadcastPort] = requires[BestEffortBroadcastPort]
