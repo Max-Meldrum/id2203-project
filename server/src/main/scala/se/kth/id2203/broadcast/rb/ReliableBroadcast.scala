@@ -2,30 +2,30 @@ package se.kth.id2203.broadcast.rb
 
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastPort}
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
-import se.kth.id2203.networking.{NetAddress}
+import se.kth.id2203.networking.NetAddress
+import se.sics.kompics.KompicsEvent
+
+case class OriginatedData(src: NetAddress, payload: KompicsEvent) extends KompicsEvent
 
 class ReliableBroadcast extends ComponentDefinition{
   private val bestEffortBroadcast: PositivePort[BestEffortBroadcastPort] = requires[BestEffortBroadcastPort]
   private val reliableBroadcast: NegativePort[ReliableBroadcastPort] = provides[ReliableBroadcastPort]
   private val self = config.getValue("id2203.project.address", classOf[NetAddress])
-  private var seqNum = 0;
-  private val delivered = collection.mutable.Set[ReliableBroadcastMessage]()
+  private val delivered = collection.mutable.Set[KompicsEvent]()
 
 
   reliableBroadcast uponEvent {
     case request: ReliableBroadcastRequest => handle {
-      seqNum += 1
-      val msg = ReliableBroadcastMessage(self, ReliableBroadcastDeliver(self, request.event), seqNum)
-      trigger(bestEffortBroadcast(msg))
+      trigger(bestEffortBroadcast(self,(request.addresses, request.event)))
     }
   }
 
   bestEffortBroadcast uponEvent {
-    case BestEffortBroadcastDeliver(src, payload: ReliableBroadcastMessage) => handle {
+    case BestEffortBroadcastDeliver(_, data@OriginatedData(src,payload)) => handle {
       if(!delivered.contains(payload)){
         delivered.add(payload)
-        trigger(ReliableBroadcastDeliver(payload.src, payload.data), reliableBroadcast)
-        trigger(bestEffortBroadcast(payload))
+        trigger(ReliableBroadcastDeliver(src, payload), reliableBroadcast)
+        trigger(bestEffortBroadcast(data.src,data.payload))
       }
     }
   }

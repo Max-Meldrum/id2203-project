@@ -1,6 +1,5 @@
 package se.kth.id2203.broadcast.beb
 
-import org.slf4j.LoggerFactory
 import se.kth.id2203.networking.{NetMessage,NetAddress}
 import se.sics.kompics.network.Network
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
