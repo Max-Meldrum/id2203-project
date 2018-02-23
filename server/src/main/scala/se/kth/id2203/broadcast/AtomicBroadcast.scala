@@ -1,14 +1,20 @@
 package se.kth.id2203.broadcast
 
-import se.kth.id2203.broadcast.AtomicBroadcast.Proposal
-import se.kth.id2203.broadcast.beb.{BestEffortBroadcastPort, BestEffortBroadcastRequest}
+import java.util.UUID
+
+import se.kth.id2203.broadcast.AtomicBroadcast.{ACKS, PROPOSAL}
+import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastPort, BestEffortBroadcastRequest}
+import se.kth.id2203.kvstore.Op
 import se.kth.id2203.networking.NetAddress
-import se.sics.kompics.KompicsEvent
+import se.sics.kompics.network.Network
+import se.sics.kompics.{Channel, Kompics, KompicsEvent}
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
 
+import scala.collection.mutable
+
 object AtomicBroadcast {
-  case class Proposal(epoch: Int, commitNumber: Int) extends KompicsEvent with Serializable
-  case class Ack(proposal: Proposal) extends KompicsEvent with Serializable
+  type ACKS = Int
+  type PROPOSAL = Int
 }
 
 /**
@@ -18,9 +24,18 @@ object AtomicBroadcast {
   * 3. Commits are sent out after receiving a majority of ACKs
   */
 class AtomicBroadcast extends ComponentDefinition {
-  val ab: NegativePort[AtomicBroadcastPort] = provides[AtomicBroadcastPort]
+  private val net: PositivePort[Network] = requires[Network]
+  private val abRequire: PositivePort[AtomicBroadcastPort] = requires[AtomicBroadcastPort]
+  private val ab: NegativePort[AtomicBroadcastPort] = provides[AtomicBroadcastPort]
   // beb for now, later tob..
-  val beb: PositivePort[BestEffortBroadcastPort] = requires[BestEffortBroadcastPort]
+  private val beb: PositivePort[BestEffortBroadcastPort] = requires[BestEffortBroadcastPort]
+  //val rb: PositivePort[ReliableBroadcastPort] = requires[ReliableBroadcastPort]
+
+  private val self = config.getValue("id2203.project.address", classOf[NetAddress])
+
+  private val delivered = collection.mutable.Set[KompicsEvent]()
+  private val unordered = collection.mutable.Set[KompicsEvent]()
+  private var accepted = mutable.HashMap[PROPOSAL, ACKS]()
 
   // Incremented Integer that is packed with each proposal
   var proposalId = 0
@@ -29,25 +44,39 @@ class AtomicBroadcast extends ComponentDefinition {
   ab uponEvent {
     case request: AtomicBroadcastRequest => handle {
       val nodes = request.addresses
-      val proposal = AtomicBroadcastProposal(Proposal(request.epoch, proposalId), request.event, nodes)
       proposalId+=1
-      //trigger(TotalOrderBroadcast(self, proposal), tob)
-      val quorum =  majority(nodes)
       log.info(s"ProposalID: $proposalId")
-      trigger(BestEffortBroadcastRequest(request, nodes) -> beb)
-      /*
-      var n = 0
-      while (n < quorum) {
-        case ack: AtomicBroadcastAck=> handle {
-          n+=1
-        }
-      }
-      trigger(AtomicBroadcastCommit(proposal, nodes), tob)
-      */
+      val proposal = AtomicBroadcastProposal(request.epoch, proposalId, request.event, nodes)
+      trigger(BestEffortBroadcastRequest(proposal, nodes) -> beb)
     }
   }
 
+  beb uponEvent {
+    case BestEffortBroadcastDeliver(dest, prop@AtomicBroadcastProposal(e,p,event,nodes)) => handle {
+      if (!delivered.contains(event)) {
+        unordered.add(event)
+        trigger(BestEffortBroadcastRequest(AtomicBroadcastAck(dest, prop), List(dest)) -> beb)
+      }
+    }
+    case BestEffortBroadcastDeliver(dest, AtomicBroadcastAck(src, prop@AtomicBroadcastProposal(e,p,event, nodes))) => handle {
+      val ack = accepted.getOrElse(p, 0)
+      val quorum = majority(nodes)
+      if (!(ack >= quorum)) {
+        val newAck = ack + 1
+        accepted.put(p, newAck)
+        if (newAck >= quorum) {
+          trigger(BestEffortBroadcastRequest(AtomicBroadcastCommit(prop), nodes) -> beb)
+        }
+      }
+    }
+    case BestEffortBroadcastDeliver(dest, commit@AtomicBroadcastCommit(AtomicBroadcastProposal(e, p, op@Op(c, k, v, id),  _))) => handle {
+      delivered.add(op)
+      unordered.remove(op)
+      log.info(s"$self committed op ${op}")
+    }
+  }
 
   private def majority(nodes: List[NetAddress]): Int =
     (nodes.size/2)+1
+
 }

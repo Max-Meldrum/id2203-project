@@ -65,5 +65,10 @@ class ParentComponent extends ComponentDefinition {
     // AtomicBroadcast
     connect(atomicBroadcast.getPositive(classOf[AtomicBroadcastPort]), overlay.getNegative(classOf[AtomicBroadcastPort]), Channel.TWO_WAY)
     connect(beb.getPositive(classOf[BestEffortBroadcastPort]), atomicBroadcast.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
+
+
+    // Allow AtomicBroadcast to send back to other components over the network..
+    //connect(net, atomicBroadcast.getNegative(classOf[Network]), Channel.TWO_WAY)
+    connect(atomicBroadcast.getPositive(classOf[AtomicBroadcastPort]), atomicBroadcast.getNegative(classOf[AtomicBroadcastPort]), Channel.TWO_WAY)
   }
 }
