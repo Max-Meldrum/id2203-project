@@ -113,11 +113,10 @@ class VSOverlayManager extends ComponentDefinition {
                   case GET =>
                     // We assume eventual consistency, read value without contacting quorum..
                     // send request directly to KVStore
-                    trigger(AtomicBroadcastRequest(epoch, msg, nodes) -> atomicBroadcast)
                     trigger(NetMessage(header.src, self, msg) -> net)
                   case PUT =>
                     // Blast proposals
-                    trigger(AtomicBroadcastRequest(epoch, msg, nodes) -> atomicBroadcast)
+                    trigger(AtomicBroadcastRequest(header.src, epoch, msg, nodes) -> atomicBroadcast)
                   case CAS =>
                   // Not impl
                   case _ =>

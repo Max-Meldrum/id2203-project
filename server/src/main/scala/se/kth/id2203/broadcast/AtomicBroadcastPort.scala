@@ -16,11 +16,11 @@ class AtomicBroadcastPort extends PortType {
 }
 
 case class AtomicBroadcastCommit(payload: KompicsEvent) extends KompicsEvent with Serializable
-case class AtomicBroadcastRequest(epoch: Int, event: KompicsEvent, addresses: List[NetAddress])
+case class AtomicBroadcastRequest(clientSrc: NetAddress, epoch: Int, event: KompicsEvent, addresses: List[NetAddress])
   extends KompicsEvent with Serializable {
   val uuid: UUID = UUID.randomUUID()
 }
-case class AtomicBroadcastProposal(epoch: Int, proposalId: Int, event: KompicsEvent, addresses: List[NetAddress])
+case class AtomicBroadcastProposal(clientSrc: NetAddress, epoch: Int, proposalId: Int, event: KompicsEvent, addresses: List[NetAddress])
   extends KompicsEvent with Serializable
 
 case class AtomicBroadcastAck(src: NetAddress, event: KompicsEvent) extends KompicsEvent with Serializable

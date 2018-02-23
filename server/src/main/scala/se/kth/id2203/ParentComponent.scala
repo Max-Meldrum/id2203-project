@@ -60,15 +60,12 @@ class ParentComponent extends ComponentDefinition {
     // KV
     connect(Routing)(overlay -> kv)
     connect[Network](net -> kv)
+    connect(Routing)(atomicBroadcast-> kv)
     // BEB
     connect(net, beb.getNegative(classOf[Network]), Channel.TWO_WAY)
     // AtomicBroadcast
     connect(atomicBroadcast.getPositive(classOf[AtomicBroadcastPort]), overlay.getNegative(classOf[AtomicBroadcastPort]), Channel.TWO_WAY)
     connect(beb.getPositive(classOf[BestEffortBroadcastPort]), atomicBroadcast.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
-
-
-    // Allow AtomicBroadcast to send back to other components over the network..
-    //connect(net, atomicBroadcast.getNegative(classOf[Network]), Channel.TWO_WAY)
-    connect(atomicBroadcast.getPositive(classOf[AtomicBroadcastPort]), atomicBroadcast.getNegative(classOf[AtomicBroadcastPort]), Channel.TWO_WAY)
+    connect(net, atomicBroadcast.getNegative(classOf[Network]), Channel.TWO_WAY)
   }
 }
