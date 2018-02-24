@@ -1,6 +1,6 @@
 package se.kth.id2203.broadcast.rb
 
-import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastPort}
+import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastPort, BestEffortBroadcastRequest}
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
 import se.kth.id2203.networking.NetAddress
 import se.sics.kompics.KompicsEvent
@@ -16,7 +16,7 @@ class ReliableBroadcast extends ComponentDefinition{
 
   reliableBroadcast uponEvent {
     case request: ReliableBroadcastRequest => handle {
-      trigger(bestEffortBroadcast(self,(request.addresses, request.event)))
+      trigger(bestEffortBroadcast(OriginatedData(self, request.event)));
     }
   }
 
