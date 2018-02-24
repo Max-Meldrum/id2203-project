@@ -1,21 +1,24 @@
-package se.kth.id2203.broadcast
+package se.kth.id2203.replica
 
-
-import se.kth.id2203.broadcast.AtomicBroadcast.{ACKS, PROPOSAL}
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastPort, BestEffortBroadcastRequest}
 import se.kth.id2203.kvstore._
 import se.kth.id2203.networking.{NetAddress, NetMessage}
-import se.kth.id2203.overlay.{RouteMsg, Routing, VSOverlayManager}
-import se.kth.id2203.overlay.VSOverlayManager.{Backup, Inactive, Primary}
+import se.kth.id2203.overlay.RouteMsg
+import se.kth.id2203.replica.Replica._
+import se.sics.kompics.KompicsEvent
 import se.sics.kompics.network.Network
-import se.sics.kompics.{KompicsEvent}
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
 
 import scala.collection.mutable
 
-object AtomicBroadcast {
+object Replica {
   type ACKS = Int
   type PROPOSAL = Int
+
+  sealed trait Status
+  case object Primary extends Status
+  case object Backup extends Status
+  case object Inactive extends Status
 }
 
 /**
@@ -24,9 +27,9 @@ object AtomicBroadcast {
   * 2. ACKs are received in order as well
   * 3. Commits are sent out after receiving a majority of ACKs
   */
-class AtomicBroadcast extends ComponentDefinition {
+class Replica extends ComponentDefinition {
   private val net: PositivePort[Network] = requires[Network]
-  private val ab: NegativePort[AtomicBroadcastPort] = provides[AtomicBroadcastPort]
+  private val replica: NegativePort[ReplicaPort] = provides[ReplicaPort]
   // beb for now, later rb..
   private val beb: PositivePort[BestEffortBroadcastPort] = requires[BestEffortBroadcastPort]
 
@@ -34,7 +37,7 @@ class AtomicBroadcast extends ComponentDefinition {
   private val unordered = collection.mutable.Set[KompicsEvent]()
   private val accepted = mutable.HashMap[PROPOSAL, ACKS]()
 
-  private var status: VSOverlayManager.Status = Inactive
+  private var status: Status = Inactive
 
   // Incremented Integer that is packed with each proposal
   private var proposalId = 0
@@ -47,7 +50,7 @@ class AtomicBroadcast extends ComponentDefinition {
   store.put("unit_test", "kth")
 
   //TODO: Make sure we have total order...
-  ab uponEvent {
+  replica uponEvent {
     case request: AtomicBroadcastRequest => handle {
       val nodes = request.addresses
       val cs = request.clientSrc
@@ -67,7 +70,7 @@ class AtomicBroadcast extends ComponentDefinition {
       }
     }
 
-    case s: AtomicBroadcastStatus => handle {
+    case s: ReplicaStatus => handle {
       // Update to Backup/Primary...
       status = s.status
     }

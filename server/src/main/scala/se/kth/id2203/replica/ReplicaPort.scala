@@ -1,19 +1,19 @@
-package se.kth.id2203.broadcast
+package se.kth.id2203.replica
 
 import java.util.UUID
 
 import se.kth.id2203.networking.NetAddress
-import se.kth.id2203.overlay.VSOverlayManager.Status
+import se.kth.id2203.replica.Replica.Status
 import se.sics.kompics.{KompicsEvent, PortType}
 
 
-class AtomicBroadcastPort extends PortType {
+class ReplicaPort extends PortType {
   {
     request(classOf[AtomicBroadcastRequest])
     indication(classOf[AtomicBroadcastCommit])
     indication(classOf[AtomicBroadcastProposal])
     request(classOf[AtomicBroadcastAck])
-    request(classOf[AtomicBroadcastStatus])
+    request(classOf[ReplicaStatus])
   }
 }
 
@@ -26,4 +26,4 @@ case class AtomicBroadcastProposal(clientSrc: NetAddress, epoch: Int, proposalId
   extends KompicsEvent with Serializable
 
 case class AtomicBroadcastAck(src: NetAddress, event: KompicsEvent) extends KompicsEvent with Serializable
-case class AtomicBroadcastStatus(status: Status) extends KompicsEvent with Serializable
+case class ReplicaStatus(status: Status) extends KompicsEvent with Serializable

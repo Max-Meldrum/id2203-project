@@ -24,11 +24,9 @@
 package se.kth.id2203.overlay;
 
 import se.kth.id2203.bootstrapping._
-import se.kth.id2203.broadcast.{AtomicBroadcastPort, AtomicBroadcastRequest, AtomicBroadcastStatus}
-import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastMessage, BestEffortBroadcastPort, BestEffortBroadcastRequest}
-import se.kth.id2203.kvstore._
 import se.kth.id2203.networking._
-import se.kth.id2203.overlay.VSOverlayManager.{Backup, Inactive, Primary, Status}
+import se.kth.id2203.replica.Replica.{Backup, Primary}
+import se.kth.id2203.replica.{AtomicBroadcastRequest, ReplicaPort, ReplicaStatus}
 import se.sics.kompics.sl._
 import se.sics.kompics.network.Network
 import se.sics.kompics.timer.Timer
@@ -52,7 +50,7 @@ class VSOverlayManager extends ComponentDefinition {
   val boot = requires(Bootstrapping)
   val net = requires[Network]
   val timer = requires[Timer]
-  val atomicBroadcast = requires[AtomicBroadcastPort]
+  val replica = requires[ReplicaPort]
   //******* Fields ******
   val self = cfg.getValue[NetAddress]("id2203.project.address")
   val replicationDegree = cfg.getValue[Int]("id2203.project.replicationDegree")
@@ -82,15 +80,15 @@ class VSOverlayManager extends ComponentDefinition {
 
       if (isLeader) {
         log.info(s"I am leader $self for group $group")
-        trigger(AtomicBroadcastStatus(Primary) -> atomicBroadcast)
+        trigger(ReplicaStatus(Primary) -> replica)
       } else {
-        trigger(AtomicBroadcastStatus(Backup) -> atomicBroadcast)
+        trigger(ReplicaStatus(Backup) -> replica)
       }
     }
   }
 
   net uponEvent {
-    case NetMessage(header, r@RouteMsg(key, msg)) => handle {
+    case NetMessage(header, RouteMsg(key, msg)) => handle {
       val nodes = lut.get
         .lookup(key)
         .toList
@@ -100,7 +98,7 @@ class VSOverlayManager extends ComponentDefinition {
       logger.debug(s"Got nodes from lookup!:\n$nodes")
 
       if (nodes.contains(self)) {
-        trigger(AtomicBroadcastRequest(header.src, epoch, msg, nodes) -> atomicBroadcast)
+        trigger(AtomicBroadcastRequest(header.src, epoch, msg, nodes) -> replica)
       } else {
         val target = nodes.head
         log.info(s"Forwarding message for key $key to $target")
@@ -131,9 +129,3 @@ class VSOverlayManager extends ComponentDefinition {
   }
 }
 
-object VSOverlayManager {
-  sealed trait Status
-  case object Primary extends Status
-  case object Backup extends Status
-  case object Inactive extends Status
-}

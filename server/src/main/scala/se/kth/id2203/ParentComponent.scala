@@ -24,11 +24,10 @@
 package se.kth.id2203;
 
 import se.kth.id2203.bootstrapping._
-import se.kth.id2203.broadcast.{AtomicBroadcast, AtomicBroadcastPort}
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcast, BestEffortBroadcastPort}
-import se.kth.id2203.kvstore.KVService
 import se.kth.id2203.networking.NetAddress
 import se.kth.id2203.overlay._
+import se.kth.id2203.replica.{Replica, ReplicaPort}
 import se.sics.kompics.sl._
 import se.sics.kompics.{Channel, Component, Init}
 import se.sics.kompics.network.Network
@@ -41,9 +40,8 @@ class ParentComponent extends ComponentDefinition {
   val timer = requires[Timer]
   //******* Children ******
   val overlay = create(classOf[VSOverlayManager], Init.NONE)
-  val kv = create(classOf[KVService], Init.NONE)
   val beb: Component = create(classOf[BestEffortBroadcast], Init.NONE)
-  val atomicBroadcast: Component = create(classOf[AtomicBroadcast], Init.NONE)
+  val replica: Component = create(classOf[Replica], Init.NONE)
 
 
   val boot = cfg.readValue[NetAddress]("id2203.project.bootstrap-address") match {
@@ -57,14 +55,11 @@ class ParentComponent extends ComponentDefinition {
     // Overlay
     connect(Bootstrapping)(boot -> overlay)
     connect[Network](net -> overlay)
-    // KV
-    connect(Routing)(overlay -> kv)
-    connect[Network](net -> kv)
     // BEB
     connect(net, beb.getNegative(classOf[Network]), Channel.TWO_WAY)
     // AtomicBroadcast
-    connect(atomicBroadcast.getPositive(classOf[AtomicBroadcastPort]), overlay.getNegative(classOf[AtomicBroadcastPort]), Channel.TWO_WAY)
-    connect(beb.getPositive(classOf[BestEffortBroadcastPort]), atomicBroadcast.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
-    connect(net, atomicBroadcast.getNegative(classOf[Network]), Channel.TWO_WAY)
+    connect(replica.getPositive(classOf[ReplicaPort]), overlay.getNegative(classOf[ReplicaPort]), Channel.TWO_WAY)
+    connect(beb.getPositive(classOf[BestEffortBroadcastPort]), replica.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
+    connect(net, replica.getNegative(classOf[Network]), Channel.TWO_WAY)
   }
 }
