@@ -60,7 +60,6 @@ class ParentComponent extends ComponentDefinition {
     // KV
     connect(Routing)(overlay -> kv)
     connect[Network](net -> kv)
-    connect(Routing)(atomicBroadcast-> kv)
     // BEB
     connect(net, beb.getNegative(classOf[Network]), Channel.TWO_WAY)
     // AtomicBroadcast

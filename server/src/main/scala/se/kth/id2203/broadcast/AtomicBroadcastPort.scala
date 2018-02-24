@@ -3,6 +3,7 @@ package se.kth.id2203.broadcast
 import java.util.UUID
 
 import se.kth.id2203.networking.NetAddress
+import se.kth.id2203.overlay.VSOverlayManager.Status
 import se.sics.kompics.{KompicsEvent, PortType}
 
 
@@ -12,6 +13,7 @@ class AtomicBroadcastPort extends PortType {
     indication(classOf[AtomicBroadcastCommit])
     indication(classOf[AtomicBroadcastProposal])
     request(classOf[AtomicBroadcastAck])
+    request(classOf[AtomicBroadcastStatus])
   }
 }
 
@@ -24,3 +26,4 @@ case class AtomicBroadcastProposal(clientSrc: NetAddress, epoch: Int, proposalId
   extends KompicsEvent with Serializable
 
 case class AtomicBroadcastAck(src: NetAddress, event: KompicsEvent) extends KompicsEvent with Serializable
+case class AtomicBroadcastStatus(status: Status) extends KompicsEvent with Serializable

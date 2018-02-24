@@ -24,7 +24,7 @@
 package se.kth.id2203.overlay;
 
 import se.kth.id2203.bootstrapping._
-import se.kth.id2203.broadcast.{AtomicBroadcastPort, AtomicBroadcastRequest}
+import se.kth.id2203.broadcast.{AtomicBroadcastPort, AtomicBroadcastRequest, AtomicBroadcastStatus}
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastMessage, BestEffortBroadcastPort, BestEffortBroadcastRequest}
 import se.kth.id2203.kvstore._
 import se.kth.id2203.networking._
@@ -58,9 +58,6 @@ class VSOverlayManager extends ComponentDefinition {
   val replicationDegree = cfg.getValue[Int]("id2203.project.replicationDegree")
   val keyRange = cfg.getValue[Int]("id2203.project.keySpaceRange")
 
-  // Set initial replica status to Inactive
-  // Primary status will be set through LE
-  private var status: Status = Inactive
   private var lut: Option[LookupTable] = None
 
   // Current epoch, gets increased with new leader..
@@ -85,75 +82,27 @@ class VSOverlayManager extends ComponentDefinition {
 
       if (isLeader) {
         log.info(s"I am leader $self for group $group")
-        status = Primary
+        trigger(AtomicBroadcastStatus(Primary) -> atomicBroadcast)
       } else {
-        status = Backup
+        trigger(AtomicBroadcastStatus(Backup) -> atomicBroadcast)
       }
     }
   }
 
   net uponEvent {
-    case NetMessage(header, RouteMsg(key, msg)) => handle {
+    case NetMessage(header, r@RouteMsg(key, msg)) => handle {
       val nodes = lut.get
         .lookup(key)
         .toList
 
       assert(nodes.nonEmpty)
-      val target = nodes.head
 
       logger.debug(s"Got nodes from lookup!:\n$nodes")
 
       if (nodes.contains(self)) {
-        status match {
-          case Primary =>
-            log.info("Primary got the request...")
-            msg match {
-              case (op: Op) => {
-                op.command match {
-                  case GET =>
-                    // We assume eventual consistency, read value without contacting quorum..
-                    // send request directly to KVStore
-                    trigger(NetMessage(header.src, self, msg) -> net)
-                  case PUT =>
-                    // Blast proposals
-                    trigger(AtomicBroadcastRequest(header.src, epoch, msg, nodes) -> atomicBroadcast)
-                  case CAS =>
-                  // Not impl
-                  case _ =>
-                    log.error(s"Primary $self received unknown operation")
-                }
-
-              }
-              case _ =>
-                log.error(s"Primary $self received unknown NetMessage")
-            }
-          case Backup =>
-            msg match {
-              case (op: Op) => {
-                op.command match {
-                  case GET =>
-                    // We assume eventual consistency, read value without contacting quorum..
-                    // send request directly to KVStore
-                    //trigger(NetMessage(header.src, self, msg) -> net)
-                    // But for now forward to primary
-                    trigger(NetMessage(header.src, target, RouteMsg(key, msg)) -> net)
-                  case PUT =>
-                    // Proposal request, forward it to the primary
-                    log.info(s"Backup $self forwarding proposal request to primary")
-                    trigger(NetMessage(header.src, target, RouteMsg(key, msg)) -> net)
-                  case CAS =>
-                  // Not impl
-                  case _ =>
-                    log.error(s"Backup $self received unknown operation")
-                }
-              }
-              case _ =>
-                log.error(s"Backup $self received unknown NetMessage")
-            }
-          case Inactive =>
-            log.info(s"$self has an inactive status")
-        }
+        trigger(AtomicBroadcastRequest(header.src, epoch, msg, nodes) -> atomicBroadcast)
       } else {
+        val target = nodes.head
         log.info(s"Forwarding message for key $key to $target")
         trigger(NetMessage(header.src, target, msg) -> net)
       }
