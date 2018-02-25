@@ -9,12 +9,13 @@ You are encouraged to create your own forks and work on them, modifying everythi
 - [x] Set up static Primary and backups
 - [x] Enable BEB broadcast
 - [x] Set up GET unit tests
+- [x] Implement 2PC with BEB
 - [ ] Total order broadcast
-- [ ] Create consensus component which total order broadcasts and waits for majority before responding to client.
 - [ ] Create unit tests for PUT
-- [ ] Make backups send heartbeats to primary to ensure we have quorum
+- [x] Make backups send heartbeats to primary to ensure we have quorum
 - [ ] Leader election after a crash
 - [ ] Implement CAS
+- [ ] Design & implement test scenarios
 - [ ] Bonus?
 
 ## Overview

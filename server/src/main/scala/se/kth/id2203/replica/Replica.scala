@@ -1,24 +1,33 @@
 package se.kth.id2203.replica
 
+import java.util.UUID
+
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastPort, BestEffortBroadcastRequest}
 import se.kth.id2203.kvstore._
 import se.kth.id2203.networking.{NetAddress, NetMessage}
 import se.kth.id2203.overlay.RouteMsg
 import se.kth.id2203.replica.Replica._
-import se.sics.kompics.{Start}
+import se.sics.kompics.{KompicsEvent, Start}
 import se.sics.kompics.network.Network
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
+import se.sics.kompics.timer.{CancelPeriodicTimeout, SchedulePeriodicTimeout, Timeout, Timer}
 
 import scala.collection.mutable
 
 object Replica {
   type Ack = Int
   type Proposal = Int
+  type Key = String
+  type Value = String
 
   sealed trait Status
   case object Primary extends Status
   case object Backup extends Status
   case object Inactive extends Status
+
+  case object Heartbeat extends KompicsEvent
+  case class PrimaryValidation(spt: SchedulePeriodicTimeout) extends Timeout(spt)
+  case class NotifyPrimary(spt: SchedulePeriodicTimeout) extends Timeout(spt)
 }
 
 class Replica extends ComponentDefinition {
@@ -27,15 +36,27 @@ class Replica extends ComponentDefinition {
   private val replica: NegativePort[ReplicaPort] = provides[ReplicaPort]
   // beb for now, later tob..
   private val beb: PositivePort[BestEffortBroadcastPort] = requires[BestEffortBroadcastPort]
+  private val timer = requires[Timer]
 
   //******* Fields ******
+  // Our kv-store
+  private val store = mutable.HashMap[Key, Value]()
+  // map that keeps track of number of ACKs for each proposal..
   private val accepted = mutable.HashMap[Proposal, Ack]()
   // Primary/Backup/Inactive
   private var status: Status = Inactive
   // Incremented Integer that is packed with each proposal
   private var proposalId = 0
+  // This replicas NetAddress
   private val self = config.getValue("id2203.project.address", classOf[NetAddress])
-  private val store = new mutable.HashMap[String,String]
+  // Current primary
+  private var primary: Option[NetAddress] = None
+  // Replicas currently synced to the Primary..
+  private val synced = mutable.HashSet.empty[NetAddress]
+
+  // Timer ids
+  private var primaryTimerId: Option[UUID] = None
+  private var backupTimerId: Option[UUID] = None
 
   ctrl uponEvent {
     case _: Start => handle {
@@ -44,7 +65,58 @@ class Replica extends ComponentDefinition {
     }
   }
 
+
+  timer uponEvent {
+    case PrimaryValidation(_) => handle {
+      synced += self
+      val quorum = majority(synced.toList)
+      val conn = synced.size
+      if (conn >= quorum) {
+        log.info(s"$self has a quorum of backups connected to it...")
+      } else {
+        log.info(s"$self lost connection with a quorum of it's cluster...")
+        // Do some form of leader election here
+      }
+
+      // Reset
+      synced.clear()
+    }
+    case NotifyPrimary(_) => handle {
+      if (primary.isDefined)
+        trigger(NetMessage(self, primary.get, Heartbeat)-> net)
+    }
+  }
+
+
+  net uponEvent {
+    case NetMessage(header, Heartbeat) => handle {
+      synced += header.src
+    }
+  }
+
+
   replica uponEvent {
+    case s: ReplicaStatus => handle {
+      // Update to Backup/Primary...
+      status = s.status
+      // Set primary of the replication group
+      primary = Some(s.primary)
+
+      // Enable/Disable replica timers..
+      status match {
+        case Primary =>
+          backupTimerId.map(new CancelPeriodicTimeout(_) -> timer)
+          backupTimerId = None
+          enablePrimaryTimeout()
+        case Backup =>
+          primaryTimerId.map(new CancelPeriodicTimeout(_) -> timer)
+          primaryTimerId = None
+          enableBackupTimer()
+        case Inactive =>
+
+      }
+    }
+
     /**
       * <AtomicBroadcastRequest>
       * 1. Proposals are sent in total order
@@ -69,10 +141,6 @@ class Replica extends ComponentDefinition {
         case Inactive =>
           log.info(s"$self has an inactive status")
       }
-    }
-    case s: ReplicaStatus => handle {
-      // Update to Backup/Primary...
-      status = s.status
     }
   }
 
@@ -119,7 +187,23 @@ class Replica extends ComponentDefinition {
     }
   }
 
+
   private def majority(nodes: List[NetAddress]): Int =
     (nodes.size/2)+1
 
+  private def enablePrimaryTimeout(): Unit = {
+    val timeout: Long = cfg.getValue[Long]("id2203.project.primaryValidation") * 2l
+    val spt = new SchedulePeriodicTimeout(timeout, timeout)
+    spt.setTimeoutEvent(PrimaryValidation(spt))
+    trigger(spt -> timer)
+    primaryTimerId = Some(spt.getTimeoutEvent.getTimeoutId)
+  }
+
+  private def enableBackupTimer(): Unit = {
+    val timeout: Long = cfg.getValue[Long]("id2203.project.heartbeatsTimer") * 2l
+    val spt = new SchedulePeriodicTimeout(timeout, timeout)
+    spt.setTimeoutEvent(NotifyPrimary(spt))
+    trigger(spt -> timer)
+    backupTimerId = Some(spt.getTimeoutEvent.getTimeoutId)
+  }
 }

@@ -26,4 +26,4 @@ case class AtomicBroadcastProposal(clientSrc: NetAddress, epoch: Int, proposalId
   extends KompicsEvent with Serializable
 
 case class AtomicBroadcastAck(src: NetAddress, event: KompicsEvent) extends KompicsEvent with Serializable
-case class ReplicaStatus(status: Status) extends KompicsEvent with Serializable
+case class ReplicaStatus(status: Status, primary: NetAddress) extends KompicsEvent with Serializable

@@ -80,9 +80,9 @@ class VSOverlayManager extends ComponentDefinition {
 
       if (isLeader) {
         log.info(s"I am leader $self for group $group")
-        trigger(ReplicaStatus(Primary) -> replica)
+        trigger(ReplicaStatus(Primary, self) -> replica)
       } else {
-        trigger(ReplicaStatus(Backup) -> replica)
+        trigger(ReplicaStatus(Backup, group.head) -> replica)
       }
     }
   }
