@@ -5,15 +5,15 @@ import se.kth.id2203.kvstore._
 import se.kth.id2203.networking.{NetAddress, NetMessage}
 import se.kth.id2203.overlay.RouteMsg
 import se.kth.id2203.replica.Replica._
-import se.sics.kompics.KompicsEvent
+import se.sics.kompics.{Start}
 import se.sics.kompics.network.Network
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
 
 import scala.collection.mutable
 
 object Replica {
-  type ACKS = Int
-  type PROPOSAL = Int
+  type Ack = Int
+  type Proposal = Int
 
   sealed trait Status
   case object Primary extends Status
@@ -21,36 +21,37 @@ object Replica {
   case object Inactive extends Status
 }
 
-/**
-  * Two-phase commit based component
-  * 1. Proposals are sent in total order
-  * 2. ACKs are received in order as well
-  * 3. Commits are sent out after receiving a majority of ACKs
-  */
 class Replica extends ComponentDefinition {
+  //******* Ports ******
   private val net: PositivePort[Network] = requires[Network]
   private val replica: NegativePort[ReplicaPort] = provides[ReplicaPort]
-  // beb for now, later rb..
+  // beb for now, later tob..
   private val beb: PositivePort[BestEffortBroadcastPort] = requires[BestEffortBroadcastPort]
 
-  private val delivered = collection.mutable.Set[KompicsEvent]()
-  private val unordered = collection.mutable.Set[KompicsEvent]()
-  private val accepted = mutable.HashMap[PROPOSAL, ACKS]()
-
+  //******* Fields ******
+  private val accepted = mutable.HashMap[Proposal, Ack]()
+  // Primary/Backup/Inactive
   private var status: Status = Inactive
-
   // Incremented Integer that is packed with each proposal
   private var proposalId = 0
-  // Current proposal that is committed
-  private var currentCommit = 0
-
   private val self = config.getValue("id2203.project.address", classOf[NetAddress])
   private val store = new mutable.HashMap[String,String]
-  // For testing purposes
-  store.put("unit_test", "kth")
 
-  //TODO: Make sure we have total order...
+  ctrl uponEvent {
+    case _: Start => handle {
+      // For testing purposes
+      store.put("unit_test", "kth")
+    }
+  }
+
   replica uponEvent {
+    /**
+      * <AtomicBroadcastRequest>
+      * 1. Proposals are sent in total order
+      * 2. ACKs are received in order as well
+      * 3. Commits are sent out after receiving a majority of ACKs
+      */
+    //TODO: Make sure we have total order...
     case request: AtomicBroadcastRequest => handle {
       val nodes = request.addresses
       val cs = request.clientSrc
@@ -69,7 +70,6 @@ class Replica extends ComponentDefinition {
           log.info(s"$self has an inactive status")
       }
     }
-
     case s: ReplicaStatus => handle {
       // Update to Backup/Primary...
       status = s.status
@@ -78,10 +78,7 @@ class Replica extends ComponentDefinition {
 
   beb uponEvent {
     case BestEffortBroadcastDeliver(dest, prop@AtomicBroadcastProposal(_, _, _,event, _)) => handle {
-      if (!delivered.contains(event)) {
-        unordered.add(event)
-        trigger(BestEffortBroadcastRequest(AtomicBroadcastAck(dest, prop), List(dest)) -> beb)
-      }
+      trigger(BestEffortBroadcastRequest(AtomicBroadcastAck(dest, prop), List(dest)) -> beb)
     }
     case BestEffortBroadcastDeliver(_, AtomicBroadcastAck(_, prop@AtomicBroadcastProposal(_, _ ,proposal, _, nodes))) => handle {
       val ack = accepted.getOrElse(proposal, 0)
@@ -91,17 +88,11 @@ class Replica extends ComponentDefinition {
         accepted.put(proposal, newAck)
         if (newAck >= quorum) {
           trigger(BestEffortBroadcastRequest(AtomicBroadcastCommit(prop), nodes) -> beb)
-
-          // not used currently
-          currentCommit+=1
         }
       }
     }
     case BestEffortBroadcastDeliver(dest, AtomicBroadcastCommit(AtomicBroadcastProposal(cs, _, _, op@Op(_, _, _, _),  _))) => handle {
       log.info(s"$self committed op ${op}")
-      delivered.add(op)
-      unordered.remove(op)
-
       //TODO: Refactor
       // If Primary, commit result and return response to client
       // If Backup, only commit the value..
