@@ -54,6 +54,9 @@ class Replica extends ComponentDefinition {
   // Replicas currently synced to the Primary..
   private val synced = mutable.HashSet.empty[NetAddress]
 
+  // Number of replicas for a replication group is set through the config
+  private val groupSize = config.getValue("id2203.project.replicationGroupSize", classOf[Int])
+
   // Timer ids
   private var primaryTimerId: Option[UUID] = None
   private var backupTimerId: Option[UUID] = None
@@ -65,14 +68,13 @@ class Replica extends ComponentDefinition {
     }
   }
 
-
   timer uponEvent {
     case PrimaryValidation(_) => handle {
       synced += self
-      val quorum = majority(synced.toList)
+      val quorum = majority(groupSize)
       val conn = synced.size
       if (conn >= quorum) {
-        log.info(s"$self has a quorum of backups connected to it...")
+        log.info(s"$self has a quorum of backups connected to it $synced")
       } else {
         log.info(s"$self lost connection with a quorum of it's cluster...")
         // Do some form of leader election here
@@ -150,7 +152,7 @@ class Replica extends ComponentDefinition {
     }
     case BestEffortBroadcastDeliver(_, AtomicBroadcastAck(_, prop@AtomicBroadcastProposal(_, _ ,proposal, _, nodes))) => handle {
       val ack = accepted.getOrElse(proposal, 0)
-      val quorum = majority(nodes)
+      val quorum = majority(groupSize)
       if (!(ack >= quorum)) {
         val newAck = ack + 1
         accepted.put(proposal, newAck)
@@ -188,8 +190,8 @@ class Replica extends ComponentDefinition {
   }
 
 
-  private def majority(nodes: List[NetAddress]): Int =
-    (nodes.size/2)+1
+  private def majority(nodes: Int): Int =
+    (nodes/2)+1
 
   private def enablePrimaryTimeout(): Unit = {
     val timeout: Long = cfg.getValue[Long]("id2203.project.primaryValidation") * 2l
