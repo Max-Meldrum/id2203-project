@@ -17,13 +17,14 @@ class ReplicaPort extends PortType {
   }
 }
 
-case class AtomicBroadcastCommit(payload: KompicsEvent) extends KompicsEvent with Serializable
 case class AtomicBroadcastRequest(clientSrc: NetAddress, epoch: Int, event: KompicsEvent, addresses: List[NetAddress])
+  extends KompicsEvent with Serializable
+
+case class AtomicBroadcastProposal(clientSrc: NetAddress, epoch: Int, proposalId: Int, event: KompicsEvent, addresses: List[NetAddress])
   extends KompicsEvent with Serializable {
   val uuid: UUID = UUID.randomUUID()
 }
-case class AtomicBroadcastProposal(clientSrc: NetAddress, epoch: Int, proposalId: Int, event: KompicsEvent, addresses: List[NetAddress])
-  extends KompicsEvent with Serializable
 
-case class AtomicBroadcastAck(src: NetAddress, event: KompicsEvent) extends KompicsEvent with Serializable
+case class AtomicBroadcastAck(src: NetAddress, dest: NetAddress, event: KompicsEvent) extends KompicsEvent with Serializable
+case class AtomicBroadcastCommit(payload: KompicsEvent) extends KompicsEvent with Serializable
 case class ReplicaStatus(status: Status, primary: NetAddress) extends KompicsEvent with Serializable

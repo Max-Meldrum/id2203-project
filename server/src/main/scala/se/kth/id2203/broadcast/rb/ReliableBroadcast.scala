@@ -5,10 +5,8 @@ import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, hand
 import se.kth.id2203.networking.NetAddress
 import se.sics.kompics.KompicsEvent
 
-case class OriginatedData(src: NetAddress, nodes: List[NetAddress], payload: KompicsEvent)
-  extends KompicsEvent with Serializable
 
-class ReliableBroadcast extends ComponentDefinition{
+class ReliableBroadcast extends ComponentDefinition {
   private val bestEffortBroadcast: PositivePort[BestEffortBroadcastPort] = requires[BestEffortBroadcastPort]
   private val reliableBroadcast: NegativePort[ReliableBroadcastPort] = provides[ReliableBroadcastPort]
   private val self = config.getValue("id2203.project.address", classOf[NetAddress])
@@ -17,16 +15,16 @@ class ReliableBroadcast extends ComponentDefinition{
 
   reliableBroadcast uponEvent {
     case request: ReliableBroadcastRequest => handle {
-      trigger(BestEffortBroadcastRequest(OriginatedData(self, request.addresses, request.event), request.addresses) -> bestEffortBroadcast)
+      trigger(BestEffortBroadcastRequest(ReliableBroadcastMessage(request.event, request.addresses), request.addresses) -> bestEffortBroadcast)
     }
   }
 
   bestEffortBroadcast uponEvent {
-    case BestEffortBroadcastDeliver(_, OriginatedData(src, nodes, payload)) => handle {
-      if(!delivered.contains(payload)){
-        delivered.add(payload)
-        trigger(ReliableBroadcastDeliver(src, payload), reliableBroadcast)
-        trigger(BestEffortBroadcastRequest(payload, nodes) -> bestEffortBroadcast)
+    case BestEffortBroadcastDeliver(src , ReliableBroadcastMessage(event, nodes)) => handle {
+      if(!delivered.contains(event)) {
+        delivered.add(event)
+        trigger(ReliableBroadcastDeliver(src, event), reliableBroadcast)
+        trigger(BestEffortBroadcastRequest(event, nodes) -> bestEffortBroadcast)
       }
     }
   }

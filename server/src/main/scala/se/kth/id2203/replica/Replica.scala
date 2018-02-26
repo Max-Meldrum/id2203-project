@@ -148,9 +148,9 @@ class Replica extends ComponentDefinition {
 
   rb uponEvent {
     case ReliableBroadcastDeliver(dest, prop@AtomicBroadcastProposal(_, _, _,event, _)) => handle {
-      trigger(ReliableBroadcastRequest(AtomicBroadcastAck(dest, prop), List(dest)) -> rb)
+      trigger(ReliableBroadcastRequest(AtomicBroadcastAck(self, dest, prop), List(dest)) -> rb)
     }
-    case ReliableBroadcastDeliver(_, AtomicBroadcastAck(_, prop@AtomicBroadcastProposal(_, _ ,proposal, _, nodes))) => handle {
+    case ReliableBroadcastDeliver(src , AtomicBroadcastAck(_, _, prop@AtomicBroadcastProposal(_, _ ,proposal, _, nodes))) => handle {
       val ack = accepted.getOrElse(proposal, 0)
       val quorum = majority(groupSize)
       if (!(ack >= quorum)) {
