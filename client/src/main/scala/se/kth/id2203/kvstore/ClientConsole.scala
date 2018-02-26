@@ -43,10 +43,10 @@ class ClientConsole(val service: ClientService) extends CommandConsole with Pars
   override def layout: Layout = colouredLayout;
   override def onInterrupt(): Unit = exit();
 
-  val opCommand = parsed(P("op" ~ " " ~ simpleStr), usage = "op <key>", descr = "Executes an op for <key>.") { key =>
-    println(s"Op with $key");
+  val get = parsed(P("GET" ~ " " ~ simpleStr), usage = "GET <key>", descr = "Executes GET for <key>.") { key =>
+    println(s"GET with $key");
 
-    val fr = service.op(key);
+    val fr = service.get(key);
     out.println("Operation sent! Awaiting response...");
     try {
       val r = Await.result(fr, 5.seconds);
@@ -54,6 +54,34 @@ class ClientConsole(val service: ClientService) extends CommandConsole with Pars
     } catch {
       case e: Throwable => logger.error("Error during op.", e);
     }
-  };
+  }
 
+  val put = parsed(P("PUT" ~ " " ~ simpleStr  ~ " " ~ simpleStr), usage = "PUT <key> <value>", descr = "Executes PUT for <key, value>.")
+  {values =>
+    println(s"PUT command with ${values._1} ${values._2}")
+
+    val fr = service.put(values._1, values._2)
+    out.println("Operation sent! Awaiting response...");
+    try {
+      val r = Await.result(fr, 5.seconds);
+      out.println("Operation complete! Response was: " + r.status);
+    } catch {
+      case e: Throwable => logger.error("Error during op.", e);
+    }
+  }
+
+
+  val cas = parsed(P("CAS" ~ " " ~ simpleStr  ~ " " ~ simpleStr ~ " " ~ simpleStr), usage = "CAS <key> <referenceVal> <newValue>",
+    descr = "Executes CAS for <key> <referenceVal> <newValue>.") {values =>
+    println(s"CAS command with ${values._1} ${values._2}")
+
+    val fr = service.cas(values._1, values._2, values._3)
+    out.println("Operation sent! Awaiting response...");
+    try {
+      val r = Await.result(fr, 5.seconds);
+      out.println("Operation complete! Response was: " + r.status);
+    } catch {
+      case e: Throwable => logger.error("Error during op.", e);
+    }
+  }
 }
