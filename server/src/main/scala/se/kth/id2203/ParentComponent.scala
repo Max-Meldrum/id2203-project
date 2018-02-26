@@ -25,6 +25,7 @@ package se.kth.id2203;
 
 import se.kth.id2203.bootstrapping._
 import se.kth.id2203.broadcast.beb.{BestEffortBroadcast, BestEffortBroadcastPort}
+import se.kth.id2203.broadcast.rb.{ReliableBroadcast, ReliableBroadcastPort}
 import se.kth.id2203.networking.NetAddress
 import se.kth.id2203.overlay._
 import se.kth.id2203.replica.{Replica, ReplicaPort}
@@ -41,6 +42,8 @@ class ParentComponent extends ComponentDefinition {
   //******* Children ******
   val overlay = create(classOf[VSOverlayManager], Init.NONE)
   val beb: Component = create(classOf[BestEffortBroadcast], Init.NONE)
+  val rb: Component = create(classOf[ReliableBroadcast], Init.NONE)
+
   val replica: Component = create(classOf[Replica], Init.NONE)
 
 
@@ -57,9 +60,12 @@ class ParentComponent extends ComponentDefinition {
     connect[Network](net -> overlay)
     // BEB
     connect(net, beb.getNegative(classOf[Network]), Channel.TWO_WAY)
+    // RB
+    connect(rb.getNegative(classOf[BestEffortBroadcastPort]), beb.getPositive(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
     // Replica
     connect(replica.getPositive(classOf[ReplicaPort]), overlay.getNegative(classOf[ReplicaPort]), Channel.TWO_WAY)
-    connect(beb.getPositive(classOf[BestEffortBroadcastPort]), replica.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
+    //connect(beb.getPositive(classOf[BestEffortBroadcastPort]), replica.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
+    connect(rb.getPositive(classOf[ReliableBroadcastPort]), replica.getNegative(classOf[ReliableBroadcastPort]), Channel.TWO_WAY)
     connect(net, replica.getNegative(classOf[Network]), Channel.TWO_WAY)
     connect[Timer](timer -> replica)
 

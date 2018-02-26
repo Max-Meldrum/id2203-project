@@ -22,7 +22,7 @@ class ReliableBroadcast extends ComponentDefinition{
   }
 
   bestEffortBroadcast uponEvent {
-    case BestEffortBroadcastDeliver(_, data@OriginatedData(src, nodes, payload)) => handle {
+    case BestEffortBroadcastDeliver(_, OriginatedData(src, nodes, payload)) => handle {
       if(!delivered.contains(payload)){
         delivered.add(payload)
         trigger(ReliableBroadcastDeliver(src, payload), reliableBroadcast)

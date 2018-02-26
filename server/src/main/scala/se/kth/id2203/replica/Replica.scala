@@ -2,7 +2,7 @@ package se.kth.id2203.replica
 
 import java.util.UUID
 
-import se.kth.id2203.broadcast.beb.{BestEffortBroadcastDeliver, BestEffortBroadcastPort, BestEffortBroadcastRequest}
+import se.kth.id2203.broadcast.rb.{ReliableBroadcastDeliver, ReliableBroadcastPort, ReliableBroadcastRequest}
 import se.kth.id2203.kvstore._
 import se.kth.id2203.networking.{NetAddress, NetMessage}
 import se.kth.id2203.overlay.RouteMsg
@@ -35,7 +35,7 @@ class Replica extends ComponentDefinition {
   private val net: PositivePort[Network] = requires[Network]
   private val replica: NegativePort[ReplicaPort] = provides[ReplicaPort]
   // beb for now, later tob..
-  private val beb: PositivePort[BestEffortBroadcastPort] = requires[BestEffortBroadcastPort]
+  private val rb: PositivePort[ReliableBroadcastPort] = requires[ReliableBroadcastPort]
   private val timer = requires[Timer]
 
   //******* Fields ******
@@ -139,29 +139,29 @@ class Replica extends ComponentDefinition {
           proposalId+=1
           log.info(s"ProposalID: $proposalId")
           val proposal = AtomicBroadcastProposal(cs, request.epoch, proposalId, request.event, nodes)
-          trigger(BestEffortBroadcastRequest(proposal, nodes) -> beb)
+          trigger(ReliableBroadcastRequest(proposal, nodes) -> rb)
         case Inactive =>
           log.info(s"$self has an inactive status")
       }
     }
   }
 
-  beb uponEvent {
-    case BestEffortBroadcastDeliver(dest, prop@AtomicBroadcastProposal(_, _, _,event, _)) => handle {
-      trigger(BestEffortBroadcastRequest(AtomicBroadcastAck(dest, prop), List(dest)) -> beb)
+  rb uponEvent {
+    case ReliableBroadcastDeliver(dest, prop@AtomicBroadcastProposal(_, _, _,event, _)) => handle {
+      trigger(ReliableBroadcastRequest(AtomicBroadcastAck(dest, prop), List(dest)) -> rb)
     }
-    case BestEffortBroadcastDeliver(_, AtomicBroadcastAck(_, prop@AtomicBroadcastProposal(_, _ ,proposal, _, nodes))) => handle {
+    case ReliableBroadcastDeliver(_, AtomicBroadcastAck(_, prop@AtomicBroadcastProposal(_, _ ,proposal, _, nodes))) => handle {
       val ack = accepted.getOrElse(proposal, 0)
       val quorum = majority(groupSize)
       if (!(ack >= quorum)) {
         val newAck = ack + 1
         accepted.put(proposal, newAck)
         if (newAck >= quorum) {
-          trigger(BestEffortBroadcastRequest(AtomicBroadcastCommit(prop), nodes) -> beb)
+          trigger(ReliableBroadcastRequest(AtomicBroadcastCommit(prop), nodes) -> rb)
         }
       }
     }
-    case BestEffortBroadcastDeliver(dest, AtomicBroadcastCommit(AtomicBroadcastProposal(cs, _, _, op@Op(_, _, _, _),  _))) => handle {
+    case ReliableBroadcastDeliver(dest, AtomicBroadcastCommit(AtomicBroadcastProposal(cs, _, _, op@Op(_, _, _, _),  _))) => handle {
       log.info(s"$self committed op ${op}")
       //TODO: Refactor
       // If Primary, commit result and return response to client
