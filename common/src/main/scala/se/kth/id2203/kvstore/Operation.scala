@@ -38,7 +38,8 @@ case object PUT extends Command
 case object CAS extends Command
 
 @SerialVersionUID(0xfacc6612da2139eaL)
-case class Op(command: Command, key: String, value: Option[String] = None, id: UUID = UUID.randomUUID())
+case class Op(command: Command, key: String, value: Option[String] = None,
+              refValue: Option[String] = None, id: UUID = UUID.randomUUID())
   extends Operation with Serializable {
   def response(status: OpCode.OpCode): OpResponse = OpResponse(None, id, status);
   def response(res: String, status: OpCode.OpCode): OpResponse = OpResponse(Some(res), id, status)

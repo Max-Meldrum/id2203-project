@@ -136,6 +136,7 @@ class Replica extends ComponentDefinition {
           val key = request.event match {case (op: Op) => op.key}
           trigger(NetMessage(cs, nodes.head, RouteMsg(key, request.event)) -> net)
         case Primary =>
+          val op = request.event match {case (op: Op) => op}
           proposalId+=1
           log.info(s"ProposalID: $proposalId")
           val proposal = AtomicBroadcastProposal(cs, request.epoch, proposalId, request.event, nodes)
@@ -161,7 +162,7 @@ class Replica extends ComponentDefinition {
         }
       }
     }
-    case ReliableBroadcastDeliver(dest, AtomicBroadcastCommit(AtomicBroadcastProposal(cs, _, _, op@Op(_, _, _, _),  _))) => handle {
+    case ReliableBroadcastDeliver(dest, AtomicBroadcastCommit(AtomicBroadcastProposal(cs, _, _, op@Op(_, _, _, _, _),  _))) => handle {
       log.info(s"$self committed op ${op}")
       //TODO: Refactor
       // If Primary, commit result and return response to client
@@ -174,7 +175,15 @@ class Replica extends ComponentDefinition {
             case PUT =>
               trigger(NetMessage(self, cs, op.response(store.put(op.key, op.value.getOrElse("")).getOrElse(""), OpCode.Ok)) -> net)
             case CAS =>
-              trigger(NetMessage(self, cs, op.response(OpCode.NotImplemented)) -> net)
+              (op.value, op.refValue) match {
+                case (Some(nV), Some(rV)) =>
+                  isSame(op.key, nV, rV) match {
+                    case true => trigger(NetMessage(self, cs, op.response(store.put(op.key, op.value.getOrElse("")).getOrElse(""), OpCode.Ok)) -> net)
+                    case false => trigger(NetMessage(self, cs, op.response(store.getOrElse(op.key, ""), OpCode.Ok)) -> net)
+                  }
+                case _ =>
+                  trigger(NetMessage(self, cs, op.response(OpCode.Error)) -> net)
+              }
           }
         case Backup =>
           op.command match {
@@ -182,6 +191,13 @@ class Replica extends ComponentDefinition {
             case PUT =>
               store.put(op.key, op.value.getOrElse(""))
             case CAS =>
+              (op.value, op.refValue) match {
+                case (Some(nV), Some(rV)) =>
+                  if (isSame(op.key, nV, rV))
+                    store.put(op.key, nV) // Store newValue
+                case _ =>
+                  log.error("Something wrong happened...")
+              }
           }
         case Inactive =>
           log.info("Something went very wrong, we shouldn't be here..")
@@ -207,5 +223,11 @@ class Replica extends ComponentDefinition {
     spt.setTimeoutEvent(NotifyPrimary(spt))
     trigger(spt -> timer)
     backupTimerId = Some(spt.getTimeoutEvent.getTimeoutId)
+  }
+
+  private def isSame(key: String, nV: String, rV:String): Boolean = {
+    store.get(key)
+      .map(_.equals(rV))
+      .get
   }
 }
