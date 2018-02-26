@@ -64,7 +64,6 @@ class ParentComponent extends ComponentDefinition {
     connect(rb.getNegative(classOf[BestEffortBroadcastPort]), beb.getPositive(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
     // Replica
     connect(replica.getPositive(classOf[ReplicaPort]), overlay.getNegative(classOf[ReplicaPort]), Channel.TWO_WAY)
-    //connect(beb.getPositive(classOf[BestEffortBroadcastPort]), replica.getNegative(classOf[BestEffortBroadcastPort]), Channel.TWO_WAY)
     connect(rb.getPositive(classOf[ReliableBroadcastPort]), replica.getNegative(classOf[ReliableBroadcastPort]), Channel.TWO_WAY)
     connect(net, replica.getNegative(classOf[Network]), Channel.TWO_WAY)
     connect[Timer](timer -> replica)
