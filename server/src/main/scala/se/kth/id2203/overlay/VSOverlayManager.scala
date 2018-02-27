@@ -58,9 +58,6 @@ class VSOverlayManager extends ComponentDefinition {
 
   private var lut: Option[LookupTable] = None
 
-  // Current epoch, gets increased with new leader..
-  private var epoch = 0
-
   //******* Handlers ******
   boot uponEvent {
     case GetInitialAssignments(nodes) => handle {
@@ -88,21 +85,21 @@ class VSOverlayManager extends ComponentDefinition {
   }
 
   net uponEvent {
-    case NetMessage(header, RouteMsg(key, msg)) => handle {
+    case NetMessage(header, r@RouteMsg(key, msg)) => handle {
       val nodes = lut.get
         .lookup(key)
         .toList
 
       assert(nodes.nonEmpty)
 
-      logger.debug(s"Got nodes from lookup!:\n$nodes")
+      //logger.debug(s"Got nodes from lookup!:\n$nodes")
 
       if (nodes.contains(self)) {
-        trigger(AtomicBroadcastRequest(header.src, epoch, msg, nodes) -> replica)
+        trigger(AtomicBroadcastRequest(header.src, msg, nodes) -> replica)
       } else {
         val target = nodes.head
         log.info(s"Forwarding message for key $key to $target")
-        trigger(NetMessage(header.src, target, msg) -> net)
+        trigger(NetMessage(header.src, target, r) -> net)
       }
     }
     case NetMessage(header, msg: Connect) => handle {

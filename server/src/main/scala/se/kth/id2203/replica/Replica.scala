@@ -45,6 +45,9 @@ class Replica extends ComponentDefinition {
   private val accepted = mutable.HashMap[Proposal, Ack]()
   // Primary/Backup/Inactive
   private var status: Status = Inactive
+  // Current epoch, gets increased with new leader..
+  // Currently not used..
+  private var epoch = 0
   // Incremented Integer that is packed with each proposal
   private var proposalId = 0
   // This replicas NetAddress
@@ -109,7 +112,7 @@ class Replica extends ComponentDefinition {
         case Primary =>
           backupTimerId.map(new CancelPeriodicTimeout(_) -> timer)
           backupTimerId = None
-          enablePrimaryTimeout()
+          enablePrimaryTimer()
         case Backup =>
           primaryTimerId.map(new CancelPeriodicTimeout(_) -> timer)
           primaryTimerId = None
@@ -136,10 +139,9 @@ class Replica extends ComponentDefinition {
           val key = request.event match {case (op: Op) => op.key}
           trigger(NetMessage(cs, nodes.head, RouteMsg(key, request.event)) -> net)
         case Primary =>
-          val op = request.event match {case (op: Op) => op}
           proposalId+=1
           log.info(s"ProposalID: $proposalId")
-          val proposal = AtomicBroadcastProposal(cs, request.epoch, proposalId, request.event, nodes)
+          val proposal = AtomicBroadcastProposal(cs, epoch, proposalId, request.event, nodes)
           trigger(ReliableBroadcastRequest(proposal, nodes) -> rb)
         case Inactive =>
           log.info(s"$self has an inactive status")
@@ -209,7 +211,7 @@ class Replica extends ComponentDefinition {
   private def majority(nodes: Int): Int =
     (nodes/2)+1
 
-  private def enablePrimaryTimeout(): Unit = {
+  private def enablePrimaryTimer(): Unit = {
     val timeout: Long = cfg.getValue[Long]("id2203.project.primaryValidation") * 2l
     val spt = new SchedulePeriodicTimeout(timeout, timeout)
     spt.setTimeoutEvent(PrimaryValidation(spt))
@@ -225,9 +227,8 @@ class Replica extends ComponentDefinition {
     backupTimerId = Some(spt.getTimeoutEvent.getTimeoutId)
   }
 
-  private def isSame(key: String, nV: String, rV:String): Boolean = {
+  private def isSame(key: String, nV: String, rV:String): Boolean =
     store.get(key)
       .map(_.equals(rV))
       .get
-  }
 }

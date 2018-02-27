@@ -17,7 +17,7 @@ class ReplicaPort extends PortType {
   }
 }
 
-case class AtomicBroadcastRequest(clientSrc: NetAddress, epoch: Int, event: KompicsEvent, addresses: List[NetAddress])
+case class AtomicBroadcastRequest(clientSrc: NetAddress, event: KompicsEvent, addresses: List[NetAddress])
   extends KompicsEvent with Serializable
 
 case class AtomicBroadcastProposal(clientSrc: NetAddress, epoch: Int, proposalId: Int, event: KompicsEvent, addresses: List[NetAddress])
