@@ -8,14 +8,14 @@ You are encouraged to create your own forks and work on them, modifying everythi
 - [x] Fix partitions and split into replication groups
 - [x] Set up static Primary and backups
 - [x] Enable BEB broadcast
-- [x] Set up GET unit tests
 - [x] Implement 2PC with BEB
-- [ ] Total order broadcast
-- [ ] Create unit tests for PUT
+- [x] Implement GET
+- [x] Implement PUT
+- [x] Implement CAS
 - [x] Make backups send heartbeats to primary to ensure we have quorum
-- [ ] Leader election after a crash
-- [ ] Implement CAS
+- [ ] Total order broadcast
 - [ ] Design & implement test scenarios
+- [ ] Leader election after a crash (if needed for bonus?)
 - [ ] Bonus?
 
 ## Overview
