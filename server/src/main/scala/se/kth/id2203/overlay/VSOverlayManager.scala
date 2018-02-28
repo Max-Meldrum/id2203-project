@@ -77,9 +77,9 @@ class VSOverlayManager extends ComponentDefinition {
 
       if (isLeader) {
         log.info(s"I am leader $self for group $group")
-        trigger(ReplicaStatus(Primary, self) -> replica)
+        trigger(ReplicaStatus(Primary, self, group) -> replica)
       } else {
-        trigger(ReplicaStatus(Backup, group.head) -> replica)
+        trigger(ReplicaStatus(Backup, group.head, group) -> replica)
       }
     }
   }
