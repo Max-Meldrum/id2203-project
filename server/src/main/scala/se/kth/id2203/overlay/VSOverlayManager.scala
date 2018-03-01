@@ -55,6 +55,7 @@ class VSOverlayManager extends ComponentDefinition {
   val self = cfg.getValue[NetAddress]("id2203.project.address")
   val replicationDegree = cfg.getValue[Int]("id2203.project.replicationDegree")
   val keyRange = cfg.getValue[Int]("id2203.project.keySpaceRange")
+  val maxKey = cfg.getValue[Int]("id2203.project.maxKey")
 
   private var lut: Option[LookupTable] = None
 
@@ -70,6 +71,7 @@ class VSOverlayManager extends ComponentDefinition {
     case Booted(assignment: LookupTable) => handle {
       log.info("Got NodeAssignment, overlay ready.")
       lut = Some(assignment)
+      lut.get.setMaxKey(maxKey)
       val group = lut.get.getReplicationGroup(self)
       val isLeader = group.headOption
         .map(_.sameHostAs(self))
@@ -97,7 +99,8 @@ class VSOverlayManager extends ComponentDefinition {
       if (nodes.contains(self)) {
         trigger(AtomicBroadcastRequest(header.src, msg, nodes) -> replica)
       } else {
-        val target = nodes.head
+        val i = Random.nextInt(nodes.size)
+        val target = nodes.drop(i).head
         log.info(s"Forwarding message for key $key to $target")
         trigger(NetMessage(header.src, target, r) -> net)
       }

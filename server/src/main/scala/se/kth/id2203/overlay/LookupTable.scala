@@ -32,6 +32,9 @@ import se.kth.id2203.networking.NetAddress;
 class LookupTable extends NodeAssignment with Serializable {
 
   val partitions = TreeSetMultiMap.empty[Int, NetAddress]
+  var maxKey = -1
+
+  def setMaxKey(key: Int): Unit = maxKey = key
 
 
   /*
@@ -47,7 +50,7 @@ class LookupTable extends NodeAssignment with Serializable {
 
   def lookup(key: String): Iterable[NetAddress] = {
     val keyHash = key.hashCode()
-    val maxKey = 150
+    //val maxKey = 150
     val res = keyHash % maxKey
 
     val partition = res match {

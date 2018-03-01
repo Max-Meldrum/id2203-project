@@ -7,12 +7,13 @@ import se.kth.id2203.kvstore._
 import se.kth.id2203.networking.{DropDead, NetAddress, NetMessage}
 import se.kth.id2203.overlay.RouteMsg
 import se.kth.id2203.replica.Replica._
-import se.sics.kompics.{Kill, KompicsEvent, Start}
+import se.sics.kompics.{ KompicsEvent, Start}
 import se.sics.kompics.network.Network
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
 import se.sics.kompics.timer.{CancelPeriodicTimeout, SchedulePeriodicTimeout, Timeout, Timer}
 
 import scala.collection.mutable
+import scala.util.{Failure, Success, Try}
 
 object Replica {
   type Ack = Int
@@ -77,7 +78,8 @@ class Replica extends ComponentDefinition {
   private var replicationGroup = mutable.Set.empty[NetAddress]
 
   // Timer ids
-  private var primaryTimerId: Option[UUID] = None
+  private var primaryTimerIdIn: Option[UUID] = None
+  private var primaryTimerIdOut: Option[UUID] = None
   private var backupTimerIdIn: Option[UUID] = None
   private var backupTimerIdOut: Option[UUID] = None
 
@@ -90,9 +92,6 @@ class Replica extends ComponentDefinition {
 
   timer uponEvent {
     case PrimaryValidation(_) => handle {
-      // Primary notifies backup's that it is still active and running..
-      synced.foreach(backup => NetMessage(self, backup, Heartbeat ) -> net)
-
       synced += self
       val quorum = majority(groupSize)
       val conn = synced.size
@@ -112,18 +111,24 @@ class Replica extends ComponentDefinition {
     }
     case NotifyPrimary(_) => handle {
       if (primary.isDefined)
-        trigger(NetMessage(self, primary.get, Heartbeat)-> net)
+        Try(trigger(NetMessage(self, primary.get, Heartbeat)-> net)) match {
+          case Success(_) => // ignore..
+          case Failure(e) =>  // ignore..
+        }
     }
     case NotifyBackups(_) => handle {
+      // Primary notifies backup's that it is still active and running..
       replicationGroup.foreach(r => trigger(NetMessage(self, r, Heartbeat)-> net))
     }
     case hasPrimary(_) => handle {
       if (primarySync.isEmpty) {
         // We have lost contact with our Primary,
         // enter Election phase
+        primary = None
+        log.info("WE LOST CONTACT WITH OUR PRIMARY")
         cancelBackupTimer()
         status = Election
-        val newLeader = NewLeaderProposal(self, epoch+1, commit, replicationGroup.toSet)
+        val newLeader = NewLeaderProposal(self, knownEpoch+1, commit, replicationGroup.toSet)
         trigger(ReliableBroadcastRequest(newLeader, replicationGroup.toList) -> rb)
       } else {
         primarySync.clear()
@@ -267,7 +272,8 @@ class Replica extends ComponentDefinition {
     }
     case ReliableBroadcastDeliver(dest, newL@NewLeaderProposal(_, _, _, _)) => handle {
       if (!promised) {
-        if (newL.lastCommit >= commit && newL.epoch > knownEpoch) {
+        log.info(s"Received NewLeaderProposal $newL")
+        if (newL.lastCommit >= commit && newL.epoch >= knownEpoch) {
           promised = true // This replica promises to not accept another leader proposal with given zxid..
           trigger(ReliableBroadcastRequest(NewLeaderAck(self, dest, newL), List(dest)) -> rb)
         }
@@ -280,6 +286,7 @@ class Replica extends ComponentDefinition {
         val newAck = ack + 1
         electionAcks.put((nP.src, nP.lastCommit), newAck)
         if (newAck >= quorum) {
+          log.info(s"Commiting newLeaderProposal $nP")
           trigger(ReliableBroadcastRequest(NewLeaderCommit(nP), replicationGroup.toList) -> rb)
         }
       }
@@ -312,9 +319,15 @@ class Replica extends ComponentDefinition {
     val timeout: Long = cfg.getValue[Long]("id2203.project.primaryValidation") * 2l
     val spt = new SchedulePeriodicTimeout(timeout, timeout)
     spt.setTimeoutEvent(PrimaryValidation(spt))
-    spt.setTimeoutEvent(NotifyBackups(spt))
     trigger(spt -> timer)
-    primaryTimerId = Some(spt.getTimeoutEvent.getTimeoutId)
+    primaryTimerIdIn = Some(spt.getTimeoutEvent.getTimeoutId)
+
+    val notifyBackupsTime: Long = cfg.getValue[Long]("id2203.project.heartbeatsTimer") * 2l
+    val sptTwo = new SchedulePeriodicTimeout(notifyBackupsTime, notifyBackupsTime)
+    sptTwo.setTimeoutEvent(NotifyBackups(sptTwo))
+    trigger(sptTwo -> timer)
+    backupTimerIdOut= Some(sptTwo.getTimeoutEvent.getTimeoutId)
+
   }
 
   private def enableBackupTimer(): Unit = {
@@ -326,19 +339,42 @@ class Replica extends ComponentDefinition {
     val validationTimeout: Long = cfg.getValue[Long]("id2203.project.primaryValidation") * 2l
     val sptTwo = new SchedulePeriodicTimeout(validationTimeout, validationTimeout)
     sptTwo.setTimeoutEvent(hasPrimary(sptTwo))
-    backupTimerIdIn = Some(spt.getTimeoutEvent.getTimeoutId)
+    trigger(sptTwo -> timer)
+    backupTimerIdIn = Some(sptTwo.getTimeoutEvent.getTimeoutId)
   }
 
+  // Can be improved...
   private def cancelBackupTimer(): Unit = {
-    backupTimerIdIn.map(new CancelPeriodicTimeout(_) -> timer)
-    backupTimerIdIn= None
-    backupTimerIdOut.map(new CancelPeriodicTimeout(_) -> timer)
-    backupTimerIdOut= None
+    backupTimerIdIn match {
+      case Some(id) =>
+        trigger(new CancelPeriodicTimeout(id) -> timer)
+        backupTimerIdIn = None
+      case None =>
+    }
+
+    backupTimerIdOut match {
+      case Some(id) =>
+        trigger(new CancelPeriodicTimeout(id) -> timer)
+        backupTimerIdOut = None
+      case None =>
+    }
   }
 
+  // Can be improved..
   private def cancelPrimaryTimer(): Unit = {
-    primaryTimerId.map(new CancelPeriodicTimeout(_) -> timer)
-    primaryTimerId = None
+    primaryTimerIdIn match {
+      case Some(id) =>
+        trigger(new CancelPeriodicTimeout(id) -> timer)
+        primaryTimerIdIn = None
+      case None =>
+    }
+
+    primaryTimerIdOut match {
+      case Some(id) =>
+        trigger(new CancelPeriodicTimeout(id) -> timer)
+        primaryTimerIdOut = None
+      case None =>
+    }
   }
 
   private def isSame(key: String, nV: String, rV:String): Boolean =
