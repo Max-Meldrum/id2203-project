@@ -112,6 +112,9 @@ class VSOverlayManager extends ComponentDefinition {
         case None => log.info("Rejecting connection request from ${header.src}, as system is not ready, yet.")
       }
     }
+    case NetMessage(header, ClusterInfo) => handle {
+      log.info(s"CLUSTER STATE: ${lut.get.partitions}")
+    }
   }
 
   route uponEvent {

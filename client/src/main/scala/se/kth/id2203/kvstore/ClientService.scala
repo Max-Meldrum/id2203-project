@@ -125,4 +125,12 @@ class ClientService extends ComponentDefinition {
     owf.promise.future
   }
 
+  def kill(dest: NetAddress): Unit = {
+    trigger(NetMessage(self, dest, DropDead) -> net)
+  }
+
+  def clusterInfo(): Unit = {
+
+  }
+
 }

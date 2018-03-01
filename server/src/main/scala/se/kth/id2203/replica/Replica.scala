@@ -4,10 +4,10 @@ import java.util.UUID
 
 import se.kth.id2203.broadcast.rb.{ReliableBroadcastDeliver, ReliableBroadcastPort, ReliableBroadcastRequest}
 import se.kth.id2203.kvstore._
-import se.kth.id2203.networking.{NetAddress, NetMessage}
+import se.kth.id2203.networking.{DropDead, NetAddress, NetMessage}
 import se.kth.id2203.overlay.RouteMsg
 import se.kth.id2203.replica.Replica._
-import se.sics.kompics.{KompicsEvent, Start}
+import se.sics.kompics.{Kill, KompicsEvent, Start}
 import se.sics.kompics.network.Network
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
 import se.sics.kompics.timer.{CancelPeriodicTimeout, SchedulePeriodicTimeout, Timeout, Timer}
@@ -52,8 +52,9 @@ class Replica extends ComponentDefinition {
   // Primary/Backup/Inactive/Election
   private var status: Status = Inactive
   // Current epoch, gets increased with new leader..
-  // Currently not used..
   private var epoch = 0
+  // Known epoch
+  private var knownEpoch = 0
   // If we have promised to honor a leader proposal
   private var promised = false
   // Incremented Integer that is packed with each proposal
@@ -99,9 +100,11 @@ class Replica extends ComponentDefinition {
         log.info(s"$self has a quorum of backups connected to it $synced")
       } else {
         log.info(s"$self lost connection with a quorum of it's cluster...")
+        log.info(s"$self is entering election phase...")
         cancelPrimaryTimer()
         status = Election
-        // Do some form of leader election here
+        val newLeader = NewLeaderProposal(self, epoch+1, commit, replicationGroup.toSet)
+        trigger(ReliableBroadcastRequest(newLeader, replicationGroup.toList) -> rb)
       }
 
       // Reset
@@ -120,7 +123,7 @@ class Replica extends ComponentDefinition {
         // enter Election phase
         cancelBackupTimer()
         status = Election
-        val newLeader = NewLeaderProposal(self, epoch, commit, replicationGroup.toSet)
+        val newLeader = NewLeaderProposal(self, epoch+1, commit, replicationGroup.toSet)
         trigger(ReliableBroadcastRequest(newLeader, replicationGroup.toList) -> rb)
       } else {
         primarySync.clear()
@@ -140,10 +143,16 @@ class Replica extends ComponentDefinition {
         case Inactive =>
       }
     }
+    case NetMessage(_ , DropDead) => handle {
+      log.info(s"Me, $self was asked to die..")
+      suicide()
+      System.exit(1) // Just to be extra safe ...
+    }
   }
 
 
   replica uponEvent {
+    // Initial bootup...
     case s: ReplicaStatus => handle {
       // Update to Backup/Primary...
       status = s.status
@@ -159,6 +168,7 @@ class Replica extends ComponentDefinition {
           cancelBackupTimer()
           enablePrimaryTimer()
         case Backup =>
+          knownEpoch +=1
           cancelPrimaryTimer()
           enableBackupTimer()
         case Election =>
@@ -256,9 +266,11 @@ class Replica extends ComponentDefinition {
       }
     }
     case ReliableBroadcastDeliver(dest, newL@NewLeaderProposal(_, _, _, _)) => handle {
-      if (newL.lastCommit > commit && newL.epoch <= epoch) {
-        promised = true // This replica promises to not accept another leader proposal with given zxid..
-        trigger(ReliableBroadcastRequest(NewLeaderAck(self, dest, newL), List(dest)) -> rb)
+      if (!promised) {
+        if (newL.lastCommit >= commit && newL.epoch > knownEpoch) {
+          promised = true // This replica promises to not accept another leader proposal with given zxid..
+          trigger(ReliableBroadcastRequest(NewLeaderAck(self, dest, newL), List(dest)) -> rb)
+        }
       }
     }
     case ReliableBroadcastDeliver(dest, nL@NewLeaderAck(_, _, nP@NewLeaderProposal(_,_,_,_))) => handle {
@@ -273,13 +285,20 @@ class Replica extends ComponentDefinition {
       }
     }
     case ReliableBroadcastDeliver(dest, c@NewLeaderCommit(newProp@NewLeaderProposal(_,_,_,_))) => handle {
+      primary = Some(newProp.src)
+
       if (newProp.src.sameHostAs(self)) {
         status = Primary
+        epoch = newProp.epoch
+        knownEpoch = newProp.epoch
         enablePrimaryTimer()
       } else {
+        knownEpoch = newProp.epoch
+        epoch += 1
         status = Backup
         enableBackupTimer()
       }
+
       // Reset...
       promised = false
     }
