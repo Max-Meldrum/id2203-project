@@ -21,61 +21,27 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package se.kth.id2203.simulation
+package se.kth.id2203.simulation.linearisability
+
+import java.net.{InetAddress, UnknownHostException}
 
 import org.scalatest._
-import se.kth.id2203.ParentComponent;
-import se.kth.id2203.networking._;
+import se.kth.id2203.ParentComponent
+import se.kth.id2203.networking._
 import se.sics.kompics.network.Address
-import java.net.{ InetAddress, UnknownHostException };
-import se.sics.kompics.sl._;
-import se.sics.kompics.sl.simulator._;
-import se.sics.kompics.simulator.{ SimulationScenario => JSimulationScenario }
+import se.sics.kompics.simulator.result.SimulationResultSingleton
 import se.sics.kompics.simulator.run.LauncherComp
-import se.sics.kompics.simulator.result.SimulationResultSingleton;
+import se.sics.kompics.simulator.{SimulationScenario => JSimulationScenario}
+import se.sics.kompics.sl._
+import se.sics.kompics.sl.simulator._
+
 import scala.concurrent.duration._
 
-class OpsTest extends FlatSpec with Matchers {
-
+class LinTest extends FlatSpec with Matchers {
   private val nMessages = 10
-  private val clusterSize = 9
-
-  //  "Classloader" should "be something" in {
-  //    val cname = classOf[SimulationResultSingleton].getCanonicalName();
-  //    var cl = classOf[SimulationResultSingleton].getClassLoader;
-  //    var i = 0;
-  //    while (cl != null) {
-  //      val res = try {
-  //        val c = cl.loadClass(cname);
-  //        true
-  //      } catch {
-  //        case t: Throwable => false
-  //      }
-  //      println(s"$i -> ${cl.getClass.getName} has class? $res");
-  //      cl = cl.getParent();
-  //      i -= 1;
-  //    }
-  //  }
-
-  "Simple operations" should "be implemented" in {
-    val seed = 123l
-    JSimulationScenario.setSeed(seed)
-    val simpleBootScenario = SimpleScenario.scenario(clusterSize)
-    val res = SimulationResultSingleton.getInstance()
-    SimulationResult += ("messages" -> nMessages)
-    simpleBootScenario.simulate(classOf[LauncherComp])
-    for (i <- 0 to nMessages) {
-      SimulationResult.get[String](s"put_test$i") should be (Some(s"kth$i"))
-      SimulationResult.get[String](s"put_test$i") should be (Some(s"kth$i"))
-    }
-    for (i <- 0 to nMessages/2){
-      SimulationResult.get[String](s"put_test$i")should be (Some(s"kth$i"))
-    }
-  }
-
 }
 
-object SimpleScenario {
+object LinTestScenario {
 
   import Distributions._
   // needed for the distributions, but needs to be initialised after setting the seed
@@ -117,7 +83,7 @@ object SimpleScenario {
     val conf = Map(
       "id2203.project.address" -> selfAddr,
       "id2203.project.bootstrap-address" -> intToServerAddress(1));
-    StartNode(selfAddr, Init.none[ScenarioClient], conf);
+    StartNode(selfAddr, Init.none[LinTestClient], conf);
   };
 
   def scenario(servers: Int): JSimulationScenario = {

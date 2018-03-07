@@ -86,10 +86,7 @@ class Replica extends ComponentDefinition {
   ctrl uponEvent {
     case _: Start => handle {
       // For testing purposes
-      store.put("get_test", "kth")
-      store.put("put_test","kth")
-      store.put("cas_test","kth")
-      store.put("casfail_test","0")
+      store.put("unit_test","kth")
     }
   }
 
