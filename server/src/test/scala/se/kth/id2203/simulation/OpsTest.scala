@@ -57,7 +57,7 @@ class OpsTest extends FlatSpec with Matchers {
   //    }
   //  }
 
-  "GET operation" should "be implemented" in {
+  "Simple operations" should "be implemented" in {
     val seed = 123l
     JSimulationScenario.setSeed(seed)
     val simpleBootScenario = SimpleScenario.scenario(clusterSize)
@@ -65,7 +65,11 @@ class OpsTest extends FlatSpec with Matchers {
     SimulationResult += ("messages" -> nMessages)
     simpleBootScenario.simulate(classOf[LauncherComp])
     for (i <- 0 to nMessages) {
-      SimulationResult.get[String](s"unit_test") should be (Some("kth"))
+      SimulationResult.get[String](s"put_test$i") should be (Some(s"kth$i"))
+      SimulationResult.get[String](s"put_test$i") should be (Some(s"kth$i"))
+    }
+    for (i <- 0 to nMessages/2){
+      SimulationResult.get[String](s"put_test$i")should be (Some(s"kth$i"))
     }
   }
 

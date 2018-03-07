@@ -37,18 +37,35 @@ import collection.mutable;
 class ScenarioClient extends ComponentDefinition {
 
   //******* Ports ******
-  val net = requires[Network];
-  val timer = requires[Timer];
+  val net = requires[Network]
+  val timer = requires[Timer]
   //******* Fields ******
-  val self = cfg.getValue[NetAddress]("id2203.project.address");
-  val server = cfg.getValue[NetAddress]("id2203.project.bootstrap-address");
-  private val pending = mutable.Map.empty[UUID, String];
+  val self = cfg.getValue[NetAddress]("id2203.project.address")
+  val server = cfg.getValue[NetAddress]("id2203.project.bootstrap-address")
+  private val pending = mutable.Map.empty[UUID, String]
   //******* Handlers ******
   ctrl uponEvent {
     case _: Start => handle {
-      val messages = SimulationResult[Int]("messages");
+      val messages = SimulationResult[Int]("messages")
+
       for (i <- 0 to messages) {
-        val op = new Op(GET, "unit_test")
+        val op = new Op(PUT, s"put_test$i", Some(s"kth$i"))
+        val routeMsg = RouteMsg(op.key, op) // don't know which partition is responsible, so ask the bootstrap server to forward it
+        trigger(NetMessage(self, server, routeMsg) -> net)
+        pending += (op.id -> op.key)
+        logger.info("Sending {}", op)
+        SimulationResult += (op.key -> "Sent")
+      }
+      for (i <- 0 to messages) {
+        val op = new Op(GET, s"put_test$i")
+        val routeMsg = RouteMsg(op.key, op) // don't know which partition is responsible, so ask the bootstrap server to forward it
+        trigger(NetMessage(self, server, routeMsg) -> net)
+        pending += (op.id -> op.key)
+        logger.info("Sending {}", op)
+        SimulationResult += (op.key -> "Sent")
+      }
+      for (i <- 0 to messages/2) {
+        val op = new Op(CAS, s"put-test$i" , Some("0"), Some(s"kth$i"))
         val routeMsg = RouteMsg(op.key, op) // don't know which partition is responsible, so ask the bootstrap server to forward it
         trigger(NetMessage(self, server, routeMsg) -> net)
         pending += (op.id -> op.key)
