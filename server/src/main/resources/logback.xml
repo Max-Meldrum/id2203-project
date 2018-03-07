@@ -18,7 +18,7 @@
 
     
     <logger name="Kompics" level="INFO"/>
-    <logger name="se.sics.kompics.timer.java.JavaTimer" level="INFO"/>
+    <logger name="se.sics.kompics.timer.java.JavaTimer" level="ERROR"/>
     <logger name="se.kth.id2203" level="INFO"/>
     <logger name="se.sics.kompics.network.netty.serialization" level="INFO"/>
 
