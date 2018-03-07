@@ -29,15 +29,17 @@ object Replica {
   case object Inactive extends Status
 
   case object Heartbeat extends KompicsEvent
+
   case class PrimaryValidation(spt: SchedulePeriodicTimeout) extends Timeout(spt)
   case class NotifyPrimary(spt: SchedulePeriodicTimeout) extends Timeout(spt)
   case class NotifyBackups(spt: SchedulePeriodicTimeout) extends Timeout(spt)
   case class hasPrimary(spt: SchedulePeriodicTimeout) extends Timeout(spt)
+  case class LeaseExtensionTimeout(spt: SchedulePeriodicTimeout) extends Timeout(spt)
 
   // Lease
   case class LeaseRequest(src: NetAddress, epoch: Int) extends KompicsEvent
   case class LeasePromise(src: NetAddress, req: KompicsEvent) extends KompicsEvent
-  case object LeaseExtension extends KompicsEvent
+  case class LeaseExtension(epoch: Int) extends KompicsEvent
 
 }
 
@@ -88,11 +90,11 @@ class Replica extends ComponentDefinition {
   private var primaryTimerIdOut: Option[UUID] = None
   private var backupTimerIdIn: Option[UUID] = None
   private var backupTimerIdOut: Option[UUID] = None
+  private var leaseExtensionTimerId: Option[UUID] = None
 
   // Check if we should use leader lease or not
   private val leaseEnabled = config.getValue("id2203.project.lease", classOf[Boolean])
-  //TODO: Create LeaseRequest, if it receives a majority of ACKs, start timer that extends the lease every t
-  private val leaseAcks = mutable.HashMap[Int, Ack]()
+  private val leasePromises = mutable.HashMap[Int, Ack]()
 
   // Lease Primary
   private var tL: Long = 0
@@ -153,6 +155,10 @@ class Replica extends ComponentDefinition {
       } else {
         primarySync.clear()
       }
+    }
+    case LeaseExtensionTimeout(_) => handle {
+      val extension = LeaseExtension(epoch)
+      trigger(ReliableBroadcastRequest(extension, replicationGroup.toList) -> rb)
     }
   }
 
@@ -221,10 +227,25 @@ class Replica extends ComponentDefinition {
           val key = request.event match {case (op: Op) => op.key}
           trigger(NetMessage(cs, primary.getOrElse(nodes.head), RouteMsg(key, request.event)) -> net)
         case Primary =>
-          proposalId+=1
-          log.info(s"ProposalID: $proposalId")
-          val proposal = AtomicBroadcastProposal(cs, epoch, proposalId, request.event, nodes)
-          trigger(ReliableBroadcastRequest(proposal, nodes) -> rb)
+          if (leaseEnabled) {
+            val op = request.event match {case (op: Op) => op}
+            if (op.command == GET) {
+              val t = getClockT()
+              if (canFastRead(t)) {
+                // Server the read directly without contacting quorum
+                log.info("SERVING SUPER FAST READ")
+                trigger(NetMessage(self, cs, op.response(store.getOrElse(op.key, ""), OpCode.Ok)) -> net)
+              } else {
+                log.info("CANNOT FAST READ!!!")
+              }
+            }
+          } else {
+            proposalId+=1
+            log.info(s"ProposalID: $proposalId")
+            val proposal = AtomicBroadcastProposal(cs, epoch, proposalId, request.event, nodes)
+            trigger(ReliableBroadcastRequest(proposal, nodes) -> rb)
+          }
+
         case Election =>
           log.info(s"$self is in election phase")
         case Inactive =>
@@ -350,16 +371,20 @@ class Replica extends ComponentDefinition {
       }
     }
     case ReliableBroadcastDeliver(dest, lP@LeasePromise(_, lR@LeaseRequest(_,_))) => handle {
-      val ack = leaseAcks.getOrElse(lR.epoch, 0)
+      val ack = leasePromises.getOrElse(lR.epoch, 0)
       val quorum = majority(groupSize)
       if (!(ack >= quorum)) {
         val newAck = ack + 1
-        leaseAcks.put(lR.epoch, newAck)
+        leasePromises.put(lR.epoch, newAck)
         if (newAck >= quorum) {
           log.info(s"We reached a quorum of promises for the lease..")
           // Start some form of timer to make the primary extend the lease every x sec..
+          initExtensionTimer()
         }
       }
+    }
+    case ReliableBroadcastDeliver(dest, ext@LeaseExtension(_)) => handle {
+
     }
   }
 
@@ -429,7 +454,10 @@ class Replica extends ComponentDefinition {
     }
 
     if (leaseEnabled) {
-      // Disable lease extension timer..
+      leaseExtensionTimerId match {
+        case Some(id) => trigger(new CancelPeriodicTimeout(id) -> timer)
+        case None =>
+      }
     }
   }
 
@@ -444,12 +472,26 @@ class Replica extends ComponentDefinition {
     trigger(ReliableBroadcastRequest(leaseReq, replicationGroup.toList) -> rb)
   }
 
-  // For now
   private def getClockT(): Long = System.currentTimeMillis()
 
-  // Return drift between? 0.1 to 0.3 sec?
-  private def driftP(): Double = 0.1
+  // Return drift between?
+  //TODO: Fix
+  private def driftP(): Double = 0.001
 
-  private def canFastRead(t: Long): Boolean =
-    (t - tL) < 10*(1-driftP())
+  private def canFastRead(t: Long): Boolean = {
+    val d = 10000*(1-driftP())
+    val tt = (t-tL)
+    val r = tt < d
+    log.info(s"FASTREAD RESULT $tt , $d and CURRENT T $tL")
+    r
+  }
+
+  private def initExtensionTimer(): Unit = {
+    //TODO: Fix timeout
+    val timeout: Long = tL
+    val spt = new SchedulePeriodicTimeout(timeout, timeout)
+    spt.setTimeoutEvent(LeaseExtensionTimeout(spt))
+    trigger(spt -> timer)
+    leaseExtensionTimerId = Some(spt.getTimeoutEvent.getTimeoutId)
+  }
 }
