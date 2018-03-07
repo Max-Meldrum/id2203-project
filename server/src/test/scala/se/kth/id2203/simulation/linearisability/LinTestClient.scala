@@ -53,7 +53,7 @@ class LinTestClient extends ComponentDefinition {
     case _: Start => handle {
       val messages = SimulationResult[Int]("messages")
       for (i <- 0 to messages) {
-        val op = new Op(PUT, s"put_test$i", Some(s"kth$i"))
+        val op = new Op(PUT, s"unit_test$i", Some(s"kth$i"))
         val routeMsg = RouteMsg(op.key, op) // don't know which partition is responsible, so ask the bootstrap server to forward it
         trigger(NetMessage(self, server, routeMsg) -> net)
         trace.enqueue(op)
@@ -61,7 +61,7 @@ class LinTestClient extends ComponentDefinition {
         logger.info("Sending {}", op)
         SimulationResult += (op.key -> "Sent")
 
-        val opGet = new Op(GET, s"put_test$i")
+        val opGet = new Op(GET, s"unit_test$i")
         val routeMsg1 = RouteMsg(opGet.key, opGet) // don't know which partition is responsible, so ask the bootstrap server to forward it
         trigger(NetMessage(self, server, routeMsg1) -> net)
         trace.enqueue(opGet)
