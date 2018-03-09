@@ -4,6 +4,34 @@
 \usepackage{float}
 \usepackage[hyphenbreaks]{breakurl}
 \usepackage[hyphens]{url}
+\usepackage{listings}
+
+
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstdefinestyle{myScalastyle}{
+  frame=tb,
+  language=scala,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  frame=single,
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3,
+}
 
 
 
@@ -62,13 +90,47 @@ In this report, we will put more focus on describing on how the broadcast phase 
 \subsection{Failure Detection}
 As we are in the fail-silent model, we do not rely on a perfect failure detector or an eventually perfect failure detector. We utilise the Zab approach, where the primary periodically checks if it has a majority of replicas connected to it. This means that backups frequently send heartbeats to the primary. If a primary notices that it no longer has a majority of followers connected, it enters an election phase. What if backup’s are isolated and cannot connect with anyone? The solution to this is that backup’s also receives heartbeats from the primary. If a backup stops hearing from the primary, it will enter an election phase and attempt to elect a new primary.
 
+\subsection{Leader Election}
 
+\section{Kompics Components}
+\subsection{Overview}
+\begin{figure}[H]
+  \centering
+  \includegraphics[scale=0.90]{img/components.png}
+  \caption[Caption for LOF]{Component Structure}  
+  \label{fig:picture}
+\end{figure}
+In figure 3, we show the relationships between the most important Kompics components in our system. The client initially connects with a bootstrap server, it then forwards it request to an overlay which checks if the which partition should be handling the request. If the current server is in the group, the overlay forwards the request to the Replica component. If the current node is not involved with the partition, it routes the request to any of the nodes in the replication group responsible for the partition.
+
+\subsection{Replica}
+As most of the logic happens in the Replica component, it will be the only component we look further into.
+\newline{}\newline{}
+The Replica starts of with an InActive state, later when it is has been fully activated, it can take the role of either Primary, Backup or Election. To enable replica's to send heartbeats, we utilise Timers. Primary and backups have separate timer id's. If a backup changes state to Primary, it then cancels the backup timers and enables primaries. Same goes for the other way around. We earlier discussed in 3.1 and 3.3 how we deal with Atomic Broadcast and Leader Election, now lets look at how it relates to the KompicsEvent's that each Replica can send and receive.
+\newline{}\newline{}
+Atomic Broadcast KompicsEvents:
+\begin{lstlisting}[style=myScalastyle]
+case class AtomicBroadcastProposal(clientSrc: NetAddress, epoch: Int, proposalId: Int, event: KompicsEvent, addresses: List[NetAddress]) extends KompicsEvent with Serializable {
+  val uuid: UUID = UUID.randomUUID()
+}
+case class AtomicBroadcastAck(src: NetAddress, dest: NetAddress, event: KompicsEvent) extends KompicsEvent with Serializable
+case class AtomicBroadcastCommit(payload: KompicsEvent) extends KompicsEvent with Serializable
+
+\end{lstlisting}
+Leader Election KompicsEvents:
+\begin{lstlisting}[style=myScalastyle]
+case class NewLeaderProposal(src: NetAddress, epoch: Int, lastCommit: Int, group: Set[NetAddress]) extends KompicsEvent with Serializable
+
+case class NewLeaderAck(src: NetAddress, dest: NetAddress, event: KompicsEvent) extends KompicsEvent with Serializable
+case class NewLeaderCommit(payload: KompicsEvent) extends KompicsEvent with Serializable
+\end{lstlisting}
 
 \section{Testing}
 
 \subsection{Operations}
 \subsection{Linearizability}
 
+
+\section{Contributions}
 
 \section{Conclusion}
 
