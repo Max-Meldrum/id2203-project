@@ -34,12 +34,10 @@ object Replica {
   case class NotifyPrimary(spt: SchedulePeriodicTimeout) extends Timeout(spt)
   case class NotifyBackups(spt: SchedulePeriodicTimeout) extends Timeout(spt)
   case class hasPrimary(spt: SchedulePeriodicTimeout) extends Timeout(spt)
-  case class LeaseExtensionTimeout(spt: SchedulePeriodicTimeout) extends Timeout(spt)
 
   // Lease
   case class LeaseRequest(src: NetAddress, epoch: Int) extends KompicsEvent
   case class LeasePromise(src: NetAddress, req: KompicsEvent) extends KompicsEvent
-  case class LeaseExtension(epoch: Int) extends KompicsEvent
 
 }
 
@@ -90,7 +88,6 @@ class Replica extends ComponentDefinition {
   private var primaryTimerIdOut: Option[UUID] = None
   private var backupTimerIdIn: Option[UUID] = None
   private var backupTimerIdOut: Option[UUID] = None
-  private var leaseExtensionTimerId: Option[UUID] = None
 
   // Check if we should use leader lease or not
   private val leaseEnabled = config.getValue("id2203.project.lease", classOf[Boolean])
@@ -98,6 +95,7 @@ class Replica extends ComponentDefinition {
 
   // Lease Primary
   private var tL: Long = 0
+  private var leaseOn = false // not pretty..
   // Lease Backup
   private var tProm: Long = 0 // Clock time when it gave last promise
   private var nProm: Int = 0  // Which epoch we have promised to.
@@ -155,10 +153,6 @@ class Replica extends ComponentDefinition {
       } else {
         primarySync.clear()
       }
-    }
-    case LeaseExtensionTimeout(_) => handle {
-      val extension = LeaseExtension(epoch)
-      trigger(ReliableBroadcastRequest(extension, replicationGroup.toList) -> rb)
     }
   }
 
@@ -231,12 +225,9 @@ class Replica extends ComponentDefinition {
             val op = request.event match {case (op: Op) => op}
             if (op.command == GET) {
               val t = getClockT()
-              if (canFastRead(t)) {
+              if (leaseOn && canFastRead(t)) {
                 // Server the read directly without contacting quorum
-                log.info("SERVING SUPER FAST READ")
                 trigger(NetMessage(self, cs, op.response(store.getOrElse(op.key, ""), OpCode.Ok)) -> net)
-              } else {
-                log.info("CANNOT FAST READ!!!")
               }
             }
           } else {
@@ -245,7 +236,6 @@ class Replica extends ComponentDefinition {
             val proposal = AtomicBroadcastProposal(cs, epoch, proposalId, request.event, nodes)
             trigger(ReliableBroadcastRequest(proposal, nodes) -> rb)
           }
-
         case Election =>
           log.info(s"$self is in election phase")
         case Inactive =>
@@ -355,11 +345,9 @@ class Replica extends ComponentDefinition {
 
       // Lease
     case ReliableBroadcastDeliver(dest, lR@LeaseRequest(_,_)) => handle {
-      log.info(s"Got LeaseRequest $lR")
       val cT = getClockT()
       val calculated = (cT - tProm) > 10*(1+driftP())
       if (lR.epoch >= epoch && calculated) {
-        log.info(s"Primary's epoch is larger than ours and calculatet is working")
         // Give promise to reject lower rounds than lR.epoch
         // and not give new promises within the next 10s
         nProm = lR.epoch
@@ -378,13 +366,9 @@ class Replica extends ComponentDefinition {
         leasePromises.put(lR.epoch, newAck)
         if (newAck >= quorum) {
           log.info(s"We reached a quorum of promises for the lease..")
-          // Start some form of timer to make the primary extend the lease every x sec..
-          initExtensionTimer()
+          leaseOn = true
         }
       }
-    }
-    case ReliableBroadcastDeliver(dest, ext@LeaseExtension(_)) => handle {
-
     }
   }
 
@@ -452,13 +436,6 @@ class Replica extends ComponentDefinition {
         primaryTimerIdOut = None
       case None =>
     }
-
-    if (leaseEnabled) {
-      leaseExtensionTimerId match {
-        case Some(id) => trigger(new CancelPeriodicTimeout(id) -> timer)
-        case None =>
-      }
-    }
   }
 
   private def isSame(key: String, nV: String, rV:String): Boolean =
@@ -474,24 +451,18 @@ class Replica extends ComponentDefinition {
 
   private def getClockT(): Long = System.currentTimeMillis()
 
-  // Return drift between?
-  //TODO: Fix
-  private def driftP(): Double = 0.001
-
-  private def canFastRead(t: Long): Boolean = {
-    val d = 10000*(1-driftP())
-    val tt = (t-tL)
-    val r = tt < d
-    log.info(s"FASTREAD RESULT $tt , $d and CURRENT T $tL")
-    r
+  // Returns drift rate 1-1000ms
+  private def driftP(): Long = {
+    val r = new scala.util.Random
+    // Seems to randomize to same value in simulation..
+    1 + r.nextInt(1000)
   }
 
-  private def initExtensionTimer(): Unit = {
-    //TODO: Fix timeout
-    val timeout: Long = tL
-    val spt = new SchedulePeriodicTimeout(timeout, timeout)
-    spt.setTimeoutEvent(LeaseExtensionTimeout(spt))
-    trigger(spt -> timer)
-    leaseExtensionTimerId = Some(spt.getTimeoutEvent.getTimeoutId)
+  private def canFastRead(t: Long): Boolean = {
+    val d: Long = 10000*(1000-driftP())
+    val tt: Long = (t-tL)
+    val r = tt < d
+    //log.info(s"FASTREAD RESULT $tt , $d and CURRENT T $tL")
+    r
   }
 }
