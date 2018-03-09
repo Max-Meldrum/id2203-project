@@ -17,7 +17,8 @@
 \maketitle
 
 \section{Introduction}
-In this project, we will implemented a distributed in memory key-value store with linearizable operation semantics. We take advantage of the Kompics \cite{DBLP:conf/p2p/AradDH09} programming model and utilise the Kompics Scala DSL. We were given a lot of freedom when it came to the design of the system, as long as we satisfied linearizability.
+In this project, we will implemented a distributed in memory key-value store with linearizable operation semantics. We take advantage of the Kompics \cite{DBLP:conf/p2p/AradDH09} programming model and utilise the Kompics Scala DSL. We were given a lot of freedom when it came to the design of the system, as long as we satisfied linearizability. We had the option of either building the entire system from scratch or using an existing project template\footnote{https://gits-15.sys.kth.se/lkroll/id2203project18scala} that sets up the basic features such as single-partitioning, overlay and routing. It was an easy choice, we went with the template.
+
 \section{Infrastructure}
 In this section, we describe how our system is designed.
 
@@ -47,7 +48,7 @@ We are assuming that all our network based components have access to a perfect-l
 \subsection{Atomic Broadcast}
 Zab, which is the algorithm behind ZooKeeper, is a crash-recovery atomic broadcast algorithm. A primary server handles client requests and broadcast state changes to the rest of the backups. The delivery order of state updates is crucial. This order is often referred as Primary Order \cite{Junqueira:2011:ZHB:2056308.2056409}. Zab consists of 3 phases. However, as we are not implementing our kv-store in a crash-recovery model, we skip the synchronising phase and only implement Leader Activation and Active Messaging \cite{zk-internals}.
 \newline{}\newline{}
-In this report, we will put more focus on describing on how the broadcast phase works and not so much on Leader Activation. Zab assumes all communication channels are FIFO, so that everything is done in order. This was not an issue for us as the channels in Kompics provide FIFO semantics. The Active Messaging in Zab is very similar to a classic two-phase commit.  Once a primary has received a client request, it broadcasts out proposals that includes its monotonically unique proposal id. Replica’s that receive proposals return with an acknowledgement (ACK). As soon as the primary has received a majority of ACKs for a given proposal, it will issue a commit to itself and its backups. This whole process can be seen in figure 2 down below.
+In this report, we will put more focus on describing on how the broadcast phase works and not so much on Leader Activation. Zab assumes all communication channels are FIFO (TCP), by utilising FIFO channels, preserving the ordering guarantees becomes very easy \cite{Reed:2008:STO:1529974.1529978}. This was not an issue for us as the channels in Kompics provide FIFO semantics. The Active Messaging in Zab is very similar to a classic two-phase commit.  Once a primary has received a client request, it broadcasts out proposals that includes its monotonically unique proposal id. Replica’s that receive proposals return with an acknowledgement (ACK). As soon as the primary has received a majority of ACKs for a given proposal, it will issue a commit to itself and its backups. This whole process can be seen in figure 2 down below.
 
 
 \begin{figure}[H]
@@ -59,7 +60,7 @@ In this report, we will put more focus on describing on how the broadcast phase 
 
 
 \subsection{Failure Detection}
-As we are in the fail-silent model, we do not rely on a perfect failure detector or an eventually perfect failure detector. We utilise the Zab approach, where the primary periodically checks if it has a majority of replicas connected to it. This means that backups frequently send heartbeats to the primary. If a primary notices that it no longer has a majority of followers connected, it enters an election phase. What if backup’s are isolated and cannot connect with anyone? The solution to this is that backup’s also receives heartbeats from the primary. If a backup stops hearing from a primary, it will enter into an election phase and attempt to elect a new primary.
+As we are in the fail-silent model, we do not rely on a perfect failure detector or an eventually perfect failure detector. We utilise the Zab approach, where the primary periodically checks if it has a majority of replicas connected to it. This means that backups frequently send heartbeats to the primary. If a primary notices that it no longer has a majority of followers connected, it enters an election phase. What if backup’s are isolated and cannot connect with anyone? The solution to this is that backup’s also receives heartbeats from the primary. If a backup stops hearing from the primary, it will enter an election phase and attempt to elect a new primary.
 
 
 
