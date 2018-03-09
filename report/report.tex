@@ -53,14 +53,12 @@ In this section, we describe how our system is designed.
 \subsection{Overview}
 
 The key-value store is portioned based on the key-space with each partition responsible for a particular key range. The partitions constitute a replication group i.e., each partition consists of a primary and its replicas. The replication groups are responsible for handling client requests and providing linearizable operation semantics.
-
-
 \begin{figure}[H]
   \centering
   \includegraphics[scale=0.6,clip]{img/architecture}
   \caption[Caption for LOF]{System architecture}  
   \label{fig:picture}
-\end{figure}
+\end{figure} 
 
 \subsection{Partitioning}
 As one of the requirements was that the system should e able to support a partitioned key-space, we have opted to go for range-partitioned integers. These partitions are distributed over the available nodes. Each partition is considered to be a replication group and we use passive replication where each of these groups consist of one primary and multiple backups. The replication within a group is done with respect to a specific replication degree.
@@ -129,8 +127,25 @@ case class NewLeaderCommit(payload: KompicsEvent) extends KompicsEvent with Seri
 \subsection{Operations}
 \subsection{Linearizability}
 
+\section{Leader Lease}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[scale=0.6]{img/benchmark.png}
+  \caption[Caption for LOF]{Benchmarking Leader lease}  
+  \label{fig:picture}
+\end{figure}
 
 \section{Contributions}
+
+\begin{itemize}
+	\item{Max Meldrum\newline{}\newline{}Replication protocol, Infrastructure and Broadcast}
+	\item{Vaikunth Srinivasan A\newline{}\newline{}Broadcast and Testing}
+
+\end{itemize}
+
+
+
 
 \section{Conclusion}
 
