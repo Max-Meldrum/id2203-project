@@ -45,7 +45,7 @@
 \maketitle
 
 \section{Introduction}
-In this project, we will implemented a distributed in memory key-value store with linearizable operation semantics. We take advantage of the Kompics \cite{DBLP:conf/p2p/AradDH09} programming model and utilise the Kompics Scala DSL. We were given a lot of freedom when it came to the design of the system, as long as we satisfied linearizability. We had the option of either building the entire system from scratch or using an existing project template\footnote{https://gits-15.sys.kth.se/lkroll/id2203project18scala} that sets up the basic features such as single-partitioning, overlay and routing. It was an easy choice, we went with the template.
+In this project, we implemented a distributed in memory key-value store with linearizable operation semantics. We take advantage of the Kompics \cite{DBLP:conf/p2p/AradDH09} programming model and utilise the Kompics Scala DSL. We were given a lot of freedom when it came to the design of the system, as long as we satisfied linearizability. We had the option of either building the entire system from scratch or using an existing project template\footnote{https://gits-15.sys.kth.se/lkroll/id2203project18scala} that sets up the basic features such as single-partitioning, overlay and routing. It was an easy choice, we went with the template.
 
 \section{Infrastructure}
 In this section, we describe how our system is designed.
@@ -61,7 +61,7 @@ The key-value store is portioned based on the key-space with each partition resp
 \end{figure} 
 
 \subsection{Partitioning}
-As one of the requirements was that the system should e able to support a partitioned key-space, we have opted to go for range-partitioned integers. These partitions are distributed over the available nodes. Each partition is considered to be a replication group and we use passive replication where each of these groups consist of one primary and multiple backups. The replication within a group is done with respect to a specific replication degree.
+As one of the requirements was that the system should be able to support a partitioned key-space, we have opted to go for range-partitioned integers. These partitions are distributed over the available nodes. Each partition is considered to be a replication group and we use passive replication where each of these groups consist of one primary and multiple backups. The replication within a group is done with respect to a specific replication degree.
 
 \subsection{System Model}
 We decided to go for the fail-silent model, where we assume our environment to be asynchronous. To ensure consistency across all replicas in a certain replication group, we use a primary-backup scheme and implement an Atomic Broadcast protocol that is heavily inspired by Zab \cite{Junqueira:2011:ZHB:2056308.2056409} which ZooKeeper \cite{Hunt:2010:ZWC:1855840.1855851} relies on.
@@ -123,16 +123,20 @@ case class NewLeaderCommit(payload: KompicsEvent) extends KompicsEvent with Seri
 \end{lstlisting}
 
 \section{Testing}
+Here, the Kompics Simulation framework has been used for testing and verifying various properties by simulating a scenario related to their specifications. A test package consists of a test scenario and a respective client to test the operations on the server. These scenarios are a good indication of whether the implementation is correct or not.
 
 \subsection{Operations}
+The capability of the store to support the fundamental operations such as GET, PUT and CAS is tested here with a scenario which is designed to start a cluster of servers as well as a test client. The client issues a set of PUT operations which are followed by a set of GET operations to read the values stored at the corresponding keys after the PUT operation. And subsequently, a set of CAS operations passing the parameters key, value and reference value is executed. During the CAS (Compare and swap) operation, the previously read value is compared with the current value and if there is a match, the swap occurs with the new value. Upon the termination of this test, we could verify that all operations were successfully executed and expected responses were received.
+
 \subsection{Linearizability}
+Linearizability is a correctness condition for concurrent objects that exploits the semantics of abstract data-types. In a linearizable system, every operation seems to execute atomically and instantaneously at some point between its invocation and response. The test for linearizability is implemented as follows: we consider a scenario where a set of servers is started as a cluster along with their corresponding sequential client. The test scenario basically takes as an input a sequential specification and a concurrent history of the operations which are written into a queue. A decision procedure then check whether the history is linearizable with respect to the specifications. 
 
 \section{Leader Lease}
 
 \begin{figure}[H]
   \centering
   \includegraphics[scale=0.6]{img/benchmark.png}
-  \caption[Caption for LOF]{Benchmarking Leader lease}  
+  \caption[Caption for LOF]{Benchmarking Leader lease	}  
   \label{fig:picture}
 \end{figure}
 
