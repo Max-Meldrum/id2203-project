@@ -7,13 +7,13 @@ import se.kth.id2203.kvstore._
 import se.kth.id2203.networking.{DropDead, NetAddress, NetMessage}
 import se.kth.id2203.overlay.RouteMsg
 import se.kth.id2203.replica.Replica._
-import se.sics.kompics.{ KompicsEvent, Start}
+import se.sics.kompics.{KompicsEvent, Start}
 import se.sics.kompics.network.Network
 import se.sics.kompics.sl.{ComponentDefinition, NegativePort, PositivePort, handle}
 import se.sics.kompics.timer.{CancelPeriodicTimeout, SchedulePeriodicTimeout, Timeout, Timer}
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 object Replica {
   type Ack = Int
@@ -29,10 +29,16 @@ object Replica {
   case object Inactive extends Status
 
   case object Heartbeat extends KompicsEvent
+
   case class PrimaryValidation(spt: SchedulePeriodicTimeout) extends Timeout(spt)
   case class NotifyPrimary(spt: SchedulePeriodicTimeout) extends Timeout(spt)
   case class NotifyBackups(spt: SchedulePeriodicTimeout) extends Timeout(spt)
   case class hasPrimary(spt: SchedulePeriodicTimeout) extends Timeout(spt)
+
+  // Lease
+  case class LeaseRequest(src: NetAddress, epoch: Int) extends KompicsEvent
+  case class LeasePromise(src: NetAddress, req: KompicsEvent) extends KompicsEvent
+
 }
 
 class Replica extends ComponentDefinition {
@@ -82,6 +88,20 @@ class Replica extends ComponentDefinition {
   private var primaryTimerIdOut: Option[UUID] = None
   private var backupTimerIdIn: Option[UUID] = None
   private var backupTimerIdOut: Option[UUID] = None
+
+  // Check if we should use leader lease or not
+  private val leaseEnabled = config.getValue("id2203.project.lease", classOf[Boolean])
+  private val leasePromises = mutable.HashMap[Int, Ack]()
+
+  // Lease Primary
+  private var tL: Long = 0
+  private var leaseOn = false // not pretty..
+  // Lease Backup
+  private var tProm: Long = 0 // Clock time when it gave last promise
+  private var nProm: Int = 0  // Which epoch we have promised to.
+
+
+
 
   ctrl uponEvent {
     case _: Start => handle {
@@ -172,6 +192,9 @@ class Replica extends ComponentDefinition {
           epoch += 1
           cancelBackupTimer()
           enablePrimaryTimer()
+          if (leaseEnabled) {
+            initLease()
+          }
         case Backup =>
           knownEpoch +=1
           cancelPrimaryTimer()
@@ -188,7 +211,6 @@ class Replica extends ComponentDefinition {
       * 2. ACKs are received in order as well
       * 3. Commits are sent out after receiving a majority of ACKs
       */
-    //TODO: Make sure we have total order...
     case request: AtomicBroadcastRequest => handle {
       val nodes = request.addresses
       val cs = request.clientSrc
@@ -199,10 +221,21 @@ class Replica extends ComponentDefinition {
           val key = request.event match {case (op: Op) => op.key}
           trigger(NetMessage(cs, primary.getOrElse(nodes.head), RouteMsg(key, request.event)) -> net)
         case Primary =>
-          proposalId+=1
-          log.info(s"ProposalID: $proposalId")
-          val proposal = AtomicBroadcastProposal(cs, epoch, proposalId, request.event, nodes)
-          trigger(ReliableBroadcastRequest(proposal, nodes) -> rb)
+          if (leaseEnabled) {
+            val op = request.event match {case (op: Op) => op}
+            if (op.command == GET) {
+              val t = getClockT()
+              if (leaseOn && canFastRead(t)) {
+                // Server the read directly without contacting quorum
+                trigger(NetMessage(self, cs, op.response(store.getOrElse(op.key, ""), OpCode.Ok)) -> net)
+              }
+            }
+          } else {
+            proposalId+=1
+            log.info(s"ProposalID: $proposalId")
+            val proposal = AtomicBroadcastProposal(cs, epoch, proposalId, request.event, nodes)
+            trigger(ReliableBroadcastRequest(proposal, nodes) -> rb)
+          }
         case Election =>
           log.info(s"$self is in election phase")
         case Inactive =>
@@ -309,6 +342,34 @@ class Replica extends ComponentDefinition {
       // Reset...
       promised = false
     }
+
+      // Lease
+    case ReliableBroadcastDeliver(dest, lR@LeaseRequest(_,_)) => handle {
+      val cT = getClockT()
+      val calculated = (cT - tProm) > 10000*(1+driftP())
+      if (lR.epoch >= epoch && calculated) {
+        // Give promise to reject lower rounds than lR.epoch
+        // and not give new promises within the next 10s
+        nProm = lR.epoch
+        tProm = cT
+        val promise = LeasePromise(self, lR)
+        trigger(ReliableBroadcastRequest(promise, List(dest)) -> rb)
+      } else {
+        // Respond with nack
+      }
+    }
+    case ReliableBroadcastDeliver(dest, lP@LeasePromise(_, lR@LeaseRequest(_,_))) => handle {
+      val ack = leasePromises.getOrElse(lR.epoch, 0)
+      val quorum = majority(groupSize)
+      if (!(ack >= quorum)) {
+        val newAck = ack + 1
+        leasePromises.put(lR.epoch, newAck)
+        if (newAck >= quorum) {
+          log.info(s"We reached a quorum of promises for the lease..")
+          leaseOn = true
+        }
+      }
+    }
   }
 
 
@@ -381,4 +442,26 @@ class Replica extends ComponentDefinition {
     store.get(key)
       .map(_.equals(rV))
       .get
+
+  private def initLease(): Unit = {
+    tL = getClockT()
+    val leaseReq = LeaseRequest(self, epoch)
+    trigger(ReliableBroadcastRequest(leaseReq, replicationGroup.toList) -> rb)
+  }
+
+  private def getClockT(): Long = System.currentTimeMillis()
+
+  private def driftP(): Double = {
+    val r = new scala.util.Random
+    val e = 0.1 + (0.2 - 0.1) * r.nextDouble
+    e
+  }
+
+  private def canFastRead(t: Long): Boolean = {
+    val d: Long = (10000*(1-driftP())).toLong
+    val tt: Long = (t-tL)
+    val r = tt < d
+    //log.info(s"FASTREAD RESULT $tt , $d and CURRENT T $tL")
+    r
+  }
 }
