@@ -346,7 +346,7 @@ class Replica extends ComponentDefinition {
       // Lease
     case ReliableBroadcastDeliver(dest, lR@LeaseRequest(_,_)) => handle {
       val cT = getClockT()
-      val calculated = (cT - tProm) > 10*(1+driftP())
+      val calculated = (cT - tProm) > 10000*(1+driftP())
       if (lR.epoch >= epoch && calculated) {
         // Give promise to reject lower rounds than lR.epoch
         // and not give new promises within the next 10s
@@ -451,15 +451,14 @@ class Replica extends ComponentDefinition {
 
   private def getClockT(): Long = System.currentTimeMillis()
 
-  // Returns drift rate 1-1000ms
-  private def driftP(): Long = {
+  private def driftP(): Double = {
     val r = new scala.util.Random
-    // Seems to randomize to same value in simulation..
-    1 + r.nextInt(1000)
+    val e = 0.1 + (0.2 - 0.1) * r.nextDouble
+    e
   }
 
   private def canFastRead(t: Long): Boolean = {
-    val d: Long = 10000*(1000-driftP())
+    val d: Long = (10000*(1-driftP())).toLong
     val tt: Long = (t-tL)
     val r = tt < d
     //log.info(s"FASTREAD RESULT $tt , $d and CURRENT T $tL")
