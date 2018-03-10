@@ -133,14 +133,16 @@ The capability of the store to support the fundamental operations such as GET, P
 Linearizability is a correctness condition for concurrent objects that exploits the semantics of abstract data-types. In a linearizable system, every operation seems to execute atomically and instantaneously at some point between its invocation and response. The test for linearizability is implemented as follows: we consider a scenario where a set of servers is started as a cluster along with their corresponding sequential client. The test scenario basically takes as an input a sequential specification and a concurrent history of the operations which are written into a queue. A decision procedure then checks whether the history is linearizable with respect to the specifications. 
 
 \section{Leader Lease}
-
+When a replica enters the Primary state and the lease option is on, a LeaseRequest is broadcasted to all servers. Once it the primary has gotten a majority of LeasePromise's, it enables the so called fast-read mode. As long as \(C(T) - tL < 10*(1-p)\) is satisfied, it can serve GET requests without contacting a majority of replicas. Important thing to note is that we do not use a real clock drift rate, we simulate it with a randomised rate between 1-1000ms.
+\newline{}\newline{}
+We did not write test scenarios that interleave reads with writes during a partition. The reason for this is that our implementation is different than Sequence-Paxos/Multi-Paxos in the sense that when a primary is isolated from the rest of the cluster, it will not be in contact with a majority of replicas. Hence, GET requests wouldn't be allowed as the replica is in the election phase.
 \begin{figure}[H]
   \centering
   \includegraphics[scale=0.6]{img/benchmark.png}
   \caption[Caption for LOF]{Leader Lease enhancement}  
   \label{fig:picture}
 \end{figure}
-
+The benchmark in figure 4 was performed by inspecting the real-time execution of the simulation.
 \section{Contributions}
 
 \begin{itemize}
