@@ -45,7 +45,7 @@
 \maketitle
 
 \section{Introduction}
-In this project, we implemented a distributed in memory key-value store with linearizable operation semantics. We take advantage of the Kompics \cite{DBLP:conf/p2p/AradDH09} programming model and utilise the Kompics Scala DSL. We were given a lot of freedom when it came to the design of the system, as long as we satisfied linearizability. We had the option of either building the entire system from scratch or using an existing project template\footnote{https://gits-15.sys.kth.se/lkroll/id2203project18scala} that sets up the basic features such as single-partitioning, overlay and routing. It was an easy choice, we went with the template.
+In this project, we implemented a distributed in memory key-value store with linearizable operation semantics. We take advantage of the Kompics \cite{DBLP:conf/p2p/AradDH09} programming model and utilise the Kompics Scala DSL. We were given a lot of freedom when it came to the design of the system, as long as we satisfied linearizability. We had the option of either building the entire system from scratch or using an existing project template\footnote{https://gits-15.sys.kth.se/lkroll/id2203project18scala} that sets up the basic features such as single-partitioning, overlay and routing. It was an easy choice, we went with the template. Our implementation is hosted on github\footnote{https://github.com/Max-Meldrum/id2203-project}
 
 \section{Infrastructure}
 In this section, we describe how our system is designed.
@@ -135,14 +135,14 @@ Linearizability is a correctness condition for concurrent objects that exploits 
 \section{Leader Lease}
 When a replica enters the Primary state and the lease option is on, a LeaseRequest is broadcasted to all servers. Once it the primary has gotten a majority of LeasePromise's, it enables the so called fast-read mode. As long as \(C(T) - tL < 10*(1-p)\) is satisfied, it can serve GET requests without contacting a majority of replicas. Important thing to note is that we do not use a real clock drift rate, we simulate it with a randomised rate between 1-1000ms.
 \newline{}\newline{}
-We did not write test scenarios that interleave reads with writes during a partition. The reason for this is that our implementation is different than Sequence-Paxos/Multi-Paxos in the sense that when a primary is isolated from the rest of the cluster, it will not be in contact with a majority of replicas. Hence, GET requests wouldn't be allowed as the replica is in the election phase.
+We did not write test scenarios that interleave reads with writes during a partition. The reason for this is that our implementation is different than Sequence-Paxos/Multi-Paxos in the sense that when a primary is isolated from the rest of the cluster, it will no longer be in contact with a majority of replicas. Hence, GET requests wouldn't be allowed as the replica has entered an election phase. The benchmark was performed by inspecting the real-time of the simulation.
 \begin{figure}[H]
   \centering
-  \includegraphics[scale=0.6]{img/benchmark.png}
+  \includegraphics[scale=0.5]{img/benchmark.png}
   \caption[Caption for LOF]{Leader Lease enhancement}  
   \label{fig:picture}
 \end{figure}
-The benchmark in figure 4 was performed by inspecting the real-time execution of the simulation.
+
 \section{Contributions}
 
 \begin{itemize}
@@ -150,12 +150,6 @@ The benchmark in figure 4 was performed by inspecting the real-time execution of
 	\item{Vaikunth Srinivasan A\newline{}\newline{}Broadcast and Testing}
 
 \end{itemize}
-
-
-
-
-\section{Conclusion}
-
 \bibliography{references}
 \bibliographystyle{unsrt}
 
