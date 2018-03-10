@@ -39,7 +39,7 @@
 \title{\textbf{ID2203 Project}}
 \author{Max Meldrum\\
 	Vaikunth Srinivasan A}
-\date{}
+\date{\today}
 \begin{document}
 
 \maketitle
@@ -89,6 +89,7 @@ In this report, we will put more focus on describing on how the broadcast phase 
 As we are in the fail-silent model, we do not rely on a perfect failure detector or an eventually perfect failure detector. We utilise the Zab approach, where the primary periodically checks if it has a majority of replicas connected to it. This means that backups frequently send heartbeats to the primary. If a primary notices that it no longer has a majority of followers connected, it enters an election phase. What if backup’s are isolated and cannot connect with anyone? The solution to this is that backup’s also receives heartbeats from the primary. If a backup stops hearing from the primary, it will enter an election phase and attempt to elect a new primary.
 
 \subsection{Leader Election}
+As mentioned in \cite{zk-internals}, the only requirements that we have to meet is that the leader has seen the highest (epoch, commitNumber) and that a majority of replicas has committed to following it. Our leader election is not an optimal approach, but it satisfies the previous mentioned requirements. Once a replica enters election phase, it broadcasts a NewLeaderProposal event. Replicas receiving the proposal compare the commitNumber and epoch to its own, if it is safe, then we reply with a NewLeaderAck. After acquiring a majority, a NewLeaderCommit is sent out and the replica enters the Primary state and is now able to execute client requests.
 
 \section{Kompics Components}
 \subsection{Overview}
@@ -136,7 +137,7 @@ Linearizability is a correctness condition for concurrent objects that exploits 
 \begin{figure}[H]
   \centering
   \includegraphics[scale=0.6]{img/benchmark.png}
-  \caption[Caption for LOF]{Benchmarking Leader lease	}  
+  \caption[Caption for LOF]{Leader Lease enhancement}  
   \label{fig:picture}
 \end{figure}
 

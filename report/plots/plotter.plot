@@ -1,4 +1,4 @@
-set title "Leader Lease Benchmark"
+set title "GET Benchmark"
 set terminal pdf enhanced
 set output 'lease.pdf'
 
@@ -10,7 +10,7 @@ set style histogram cluster gap 4
 set style fill solid border -1
 set boxwidth 0.9
 set format x '%+-.6f' # to make the labels longer
-set xtics rotate by 25 right
+#set xtics rotate by 25 right
 
 
 set auto x
