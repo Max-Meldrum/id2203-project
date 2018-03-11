@@ -1,7 +1,9 @@
-# ID2203 Project 2018 Starter Code for Kompics Scala
+# ID2203 Project 2018
 
-This project contains some code to get you started with the project.
-You are encouraged to create your own forks and work on them, modifying everything and anything as you desire it.
+This project was for ID2203, Distributed Systems Advanced Course at KTH.
+
+**Note: This project is meant to introduce the abstractions in the course, it is not a full-fledged production system**
+
 
 ## Tasks
 
@@ -16,8 +18,7 @@ You are encouraged to create your own forks and work on them, modifying everythi
 - [x] Make backups send heartbeats to primary to ensure we have quorum
 - [x] Make primary send heartbeats to backups.
 - [x] Leader election after a crash
-- [ ] Design & implement test scenarios
-- [ ] Bonus?
+- [x] Lease for testing
 
 ## Overview
 

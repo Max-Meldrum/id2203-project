@@ -127,7 +127,29 @@ Here, the Kompics Simulation framework has been used for testing and verifying v
 The capability of the store to support the fundamental operations such as GET, PUT and CAS is tested here with a scenario which is designed to start a cluster of servers as well as a test client. The client issues a set of PUT operations which are followed by a set of GET operations to read the values stored at the corresponding keys after the PUT operation. And subsequently, a set of CAS operations passing the parameters key, value and reference value is executed. During the CAS (Compare and swap) operation, the previously read value is compared with the current value and if there is a match, the swap occurs with the new value. Upon the termination of this test, we could verify that all operations were successfully executed and expected responses were received.
 
 \subsection{Linearizability}
-Linearizability is a correctness condition for concurrent objects that exploits the semantics of abstract data-types. In a linearizable system, every operation seems to execute atomically and instantaneously at some point between its invocation and response. The test for linearizability is implemented as follows: we consider a scenario where a set of servers is started as a cluster along with their corresponding sequential client. The test scenario basically takes as an input a sequential specification and a concurrent history of the operations which are written into a queue. A decision procedure then checks whether the history is linearizable with respect to the specifications. 
+Linearizability is a correctness condition for concurrent objects that exploits the semantics of abstract data-types. In a linearizable system, every operation seems to execute atomically and instantaneously at some point between its invocation and response. The test for linearizability can be implemented as follows: consider a scenario where a set of servers is started as a cluster along with their corresponding sequential client. The test scenario basically takes as an input a sequential specification and a concurrent history of the operations which are written into a queue. A decision procedure known as the Wing and Gong algorithm can then be used to check for linearizability. The algorithm is shown below:
+
+\vfill
+\begin{lstlisting}[style=myScalastyle]
+/**
+*	Inputs: A complete history h and a sequential specification S
+*	Returns: true if h is linearizable
+*/
+def isLinearizable(h, S) : Boolean = {
+     if (h is empty) return true
+     else {					
+        for each operation op { 
+        // try linearizing op first
+        let res be the result of op in h				
+        run op on S
+        if(S gives result res && isLinearizable(h − op, S)) 
+        		return true 	
+        }					
+      return false
+      }									
+}
+\end{lstlisting}
+
 
 \section{Leader Lease}
 When a replica enters the Primary state and the lease option is on, a LeaseRequest is broadcasted to all replicas. Once the primary has gotten a majority of LeasePromise's, it enables the so called fast-read mode. As long as \(C(T) - tL < 10*(1-p)\) is satisfied, it can serve GET requests without contacting a majority. Important thing to note is that we do not use a real clock drift rate, we simulate it with a randomised rate between 0.1-0.2.
