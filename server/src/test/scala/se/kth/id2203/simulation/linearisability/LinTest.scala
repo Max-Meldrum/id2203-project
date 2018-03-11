@@ -28,7 +28,6 @@ import java.net.{InetAddress, UnknownHostException}
 import org.scalatest._
 import se.kth.id2203.ParentComponent
 import se.kth.id2203.networking._
-import se.kth.id2203.simulation.operations.SimpleScenario
 import se.sics.kompics.network.Address
 import se.sics.kompics.simulator.result.SimulationResultSingleton
 import se.sics.kompics.simulator.run.LauncherComp
@@ -39,21 +38,25 @@ import se.sics.kompics.sl.simulator._
 import scala.concurrent.duration._
 
 class LinTest extends FlatSpec with Matchers {
-  private val nMessages = 10
+  private val nMessages = 4
   private val clusterSize = 9
 
   "Linearizability" should "be implemented" in {
     val seed = 123l
     JSimulationScenario.setSeed(seed)
-    val simpleBootScenario = SimpleScenario.scenario(clusterSize)
+    val simpleBootScenario = LinTestScenario.scenario(clusterSize)
     val res = SimulationResultSingleton.getInstance()
     SimulationResult += ("messages" -> nMessages)
     simpleBootScenario.simulate(classOf[LauncherComp])
     for (i <- 0 to nMessages) {
       //PUT operation
-      SimulationResult.get[String](s"unit_test$i") should be (Some(s"kth$i"))
+      SimulationResult.get[String](s"unit_test$i") should be (Some(s"Sent"))
       //GET operation
-      SimulationResult.get[String](s"unit_test$i") should be (Some(s"kth$i"))
+      SimulationResult.get[String](s"unit_test$i") should be (Some(s"Sent"))
+    }
+    for(i <-0 to nMessages){
+      //CAS operation
+      SimulationResult.get[String](s"unit_test$i") should be (Some(s"Sent"))
     }
   }
 }

@@ -36,8 +36,6 @@ sealed trait Command
 case object GET extends Command
 case object PUT extends Command
 case object CAS extends Command
-case object  C extends Command
-case object  QUEUE extends Command
 
 
 @SerialVersionUID(0xfacc6612da2139eaL)
