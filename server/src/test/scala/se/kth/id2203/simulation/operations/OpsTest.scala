@@ -39,7 +39,7 @@ import scala.concurrent.duration._
 
 class OpsTest extends FlatSpec with Matchers {
 
-  private val nMessages = 4
+  private val nMessages = 10
   private val clusterSize = 9
 
   //  "Classloader" should "be something" in {
@@ -68,13 +68,13 @@ class OpsTest extends FlatSpec with Matchers {
     simpleBootScenario.simulate(classOf[LauncherComp])
     for (i <- 0 to nMessages) {
       //PUT operation
-      SimulationResult.get[String](s"unit_test$i") should be (Some(s"Sent"))
+      SimulationResult.get[String](s"unit_test$i") should be (Some(s"kth$i"))
       //GET operation
-      SimulationResult.get[String](s"unit_test$i") should be (Some(s"Sent"))
+      SimulationResult.get[String](s"unit_test$i") should be (Some(s"kth$i"))
     }
     for (i <- 0 to nMessages/2){
       //CAS operation
-      SimulationResult.get[String](s"unit_test$i")should be (Some(s"Sent"))
+      SimulationResult.get[String](s"unit_test$i")should be (Some(s"kth$i"))
     }
   }
 

@@ -47,7 +47,7 @@ class LinTestClient extends ComponentDefinition {
   private val pending = mutable.Map.empty[UUID, String]
   val trace = mutable.Queue.empty[Op]
   var traceNo = 0;
-  var oP : Op = new Op(CAS,"unit_test",Some("kth"))
+  var oP : Op = new Op(C,"",Some(""))
   var qMsgID = oP.id
   ctrl uponEvent {
     case _: Start => handle {
@@ -69,12 +69,10 @@ class LinTestClient extends ComponentDefinition {
         logger.info("Sending {}", opGet)
         SimulationResult += (op.key -> "Sent")
       }
-      for (i <- 0 to messages / 2) {
-        val op = new Op(CAS, s"unit_test$i", Some(s"kth$i"))
-        qMsgID = op.id
-        val routeMsg = RouteMsg(op.key, op)
-        trigger(NetMessage(self, server, routeMsg) -> net)
-      }
+      val op = new Op(QUEUE,"",Some(""))
+      qMsgID = op.id
+      val routeMsg = RouteMsg(op.key, op)
+      trigger(NetMessage(self, server, routeMsg) -> net)
     }
   }
 
@@ -84,15 +82,13 @@ class LinTestClient extends ComponentDefinition {
      var correctTrace = true
       if(id.equals(qMsgID)){
         val tempTrace = trace.clone()
+        val nTrace = res.get.asInstanceOf[mutable.Queue[Op]]
         for(i <- 0 to SimulationResult[Int]("messages")*2){
           val opr = tempTrace.dequeue()
-          while(!opr.id.equals(trace.dequeue().id)){
-            if(trace.isEmpty){
+          while(!opr.id.equals(nTrace.dequeue().id)){
+            if(nTrace.isEmpty){
               correctTrace = false
-              log.info("Not Linearizable")
-            }
-            else{
-              log.info("Linearizability Satisfied!")
+              println("Not Linearizable")
             }
           }
         }
