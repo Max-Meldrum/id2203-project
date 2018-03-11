@@ -52,16 +52,13 @@ In this section, we describe how our system is designed.
 
 \subsection{Overview}
 
-The key-value store is portioned based on the key-space with each partition responsible for a particular key range. The partitions constitute a replication group i.e., each partition consists of a primary and its replicas. The replication groups are responsible for handling client requests and providing linearizable operation semantics.
+The key-value store is portioned based on the key-space with each partition responsible for a particular key range. The partitions constitute a replication group i.e., each partition consists of a primary and its backups. The replication groups are responsible for handling client requests and providing linearizable operation semantics.
 \begin{figure}[H]
   \centering
   \includegraphics[scale=0.6,clip]{img/architecture}
   \caption[Caption for LOF]{System architecture}  
   \label{fig:picture}
 \end{figure} 
-
-\subsection{Partitioning}
-As one of the requirements was that the system should be able to support a partitioned key-space, we have opted to go for range-partitioned integers. These partitions are distributed over the available nodes. Each partition is considered to be a replication group and we use passive replication where each of these groups consist of one primary and multiple backups. The replication within a group is done with respect to a specific replication degree.
 
 \subsection{System Model}
 We decided to go for the fail-silent model, where we assume our environment to be asynchronous. To ensure consistency across all replicas in a certain replication group, we use a primary-backup scheme and implement an Atomic Broadcast protocol that is heavily inspired by Zab \cite{Junqueira:2011:ZHB:2056308.2056409} which ZooKeeper \cite{Hunt:2010:ZWC:1855840.1855851} relies on.
@@ -74,22 +71,22 @@ We are assuming that all our network based components have access to a perfect-l
 \subsection{Atomic Broadcast}
 Zab, which is the algorithm behind ZooKeeper, is a crash-recovery atomic broadcast algorithm. A primary server handles client requests and broadcast state changes to the rest of the backups. The delivery order of state updates is crucial. This order is often referred as Primary Order \cite{Junqueira:2011:ZHB:2056308.2056409}. Zab consists of 3 phases. However, as we are not implementing our kv-store in a crash-recovery model, we skip the synchronising phase and only implement Leader Activation and Active Messaging \cite{zk-internals}.
 \newline{}\newline{}
-In this report, we will put more focus on describing on how the broadcast phase works and not so much on Leader Activation. Zab assumes all communication channels are FIFO (TCP), by utilising FIFO channels, preserving the ordering guarantees becomes very easy \cite{Reed:2008:STO:1529974.1529978}. This was not an issue for us as the channels in Kompics provide FIFO semantics. The Active Messaging in Zab is very similar to a classic two-phase commit.  Once a primary has received a client request, it broadcasts out proposals that includes its monotonically unique proposal id. Replica’s that receive proposals return with an acknowledgement (ACK). As soon as the primary has received a majority of ACKs for a given proposal, it will issue a commit to itself and its backups. This whole process can be seen in figure 2 down below.
+In this report, we will put more focus on describing how the broadcast phase works and not so much on Leader Activation. Zab assumes all communication channels are FIFO (TCP), by utilising FIFO channels, preserving the ordering guarantees becomes very easy \cite{Reed:2008:STO:1529974.1529978}. This was not an issue for us as the channels in Kompics provide FIFO semantics. The Active Messaging in Zab is very similar to a classic two-phase commit.  Once a primary has received a client request, it broadcasts the proposal that includes its monotonically unique proposal id. Replicas that receive proposals return with an acknowledgement (ACK). As soon as the primary has received a majority of ACKs for a given proposal, it will issue a commit to itself and its backups. This whole process can be seen in figure 2 down below.
 
 
 \begin{figure}[H]
   \centering
   \includegraphics[scale=0.90]{img/2pc.jpg}
-  \caption[Caption for LOF]{ZooKeeper messaging \protect \cite{zk-internals}}  
+  \caption[Caption for LOF]{Zab messaging \protect \cite{zk-internals}}  
   \label{fig:picture}
 \end{figure}
 
 
 \subsection{Failure Detection}
-As we are in the fail-silent model, we do not rely on a perfect failure detector or an eventually perfect failure detector. We utilise the Zab approach, where the primary periodically checks if it has a majority of replicas connected to it. This means that backups frequently send heartbeats to the primary. If a primary notices that it no longer has a majority of followers connected, it enters an election phase. What if backup’s are isolated and cannot connect with anyone? The solution to this is that backup’s also receives heartbeats from the primary. If a backup stops hearing from the primary, it will enter an election phase and attempt to elect a new primary.
+As we are in the fail-silent model, we do not rely on a perfect failure detector or an eventually perfect failure detector. We utilise the Zab approach, where the primary periodically checks if it has a majority of backups connected to it. This means that backups frequently send heartbeats to the primary. If a primary notices that it no longer has a majority of followers connected, it enters an election phase. What if backups are isolated and cannot connect with anyone? The solution to this is that backups also expects heartbeats from the primary. If a backup stops hearing from the primary, it will enter an election phase and attempt to elect a new primary.
 
 \subsection{Leader Election}
-As mentioned in \cite{zk-internals}, the only requirements that we have to meet is that the leader has seen the highest (epoch, commitNumber) and that a majority of replicas has committed to following it. Our leader election is not an optimal approach, but it satisfies the previous mentioned requirements. Once a replica enters election phase, it broadcasts a NewLeaderProposal event. Replicas receiving the proposal compare the commitNumber and epoch to its own, if it is safe, then we reply with a NewLeaderAck. After acquiring a majority, a NewLeaderCommit is sent out and the replica enters the Primary state and is now able to execute client requests.
+As mentioned in \cite{zk-internals}, the only requirements that we have to meet is that the leader has seen the highest (epoch, commitNumber) and that a majority of replicas has committed to following it. Our leader election is not an optimal approach, but it satisfies the previous mentioned properties. Once a replica enters election phase, it broadcasts a NewLeaderProposal event. Replicas receiving the proposal compare the commitNumber and epoch to its own, if it is safe, then we reply with a NewLeaderAck. After acquiring a majority, a NewLeaderCommit is sent out and the replica enters the Primary state and is now able to handle client requests once again.
 
 \section{Kompics Components}
 \subsection{Overview}
@@ -99,12 +96,12 @@ As mentioned in \cite{zk-internals}, the only requirements that we have to meet 
   \caption[Caption for LOF]{Component Structure}  
   \label{fig:picture}
 \end{figure}
-In figure 3, we show the relationships between the most important Kompics components in our system. The client initially connects with a bootstrap server, it then forwards the request to an overlay which checks which partition should be handling the request. If the current server is in the group, the overlay forwards the request to the Replica component. If the current node is not involved with the partition, it routes the request to any of the nodes in the replication group responsible for the partition.
+In figure 3, we show the relationships between the most important Kompics components in our system. The client initially connects with a bootstrap server, it then forwards the request to an overlay which checks which partition should be handling the request. If the current replica is in the group, the overlay forwards the request to the Replica component. If the current replica is not involved with the partition, it routes the request to any of the replicas in the replication group responsible for the partition.
 
 \subsection{Replica}
 As most of the logic happens in the Replica component, it will be the only component we look further into.
 \newline{}\newline{}
-The Replica starts of with an InActive state, later when it is has been fully activated, it can take the role of either Primary, Backup or Election. To enable replica's to send heartbeats, we utilise Timers. Primary and backups have separate timer id's. If a backup changes state to Primary, it then cancels the backup timers and enables primaries. Same goes for the other way around. We earlier discussed in 3.1 and 3.3 how we deal with Atomic Broadcast and Leader Election, now lets look at how it relates to the KompicsEvent's that each Replica can send and receive.
+The Replica starts of with an InActive state, later when it is has been fully activated, it can take the role of either Primary, Backup or Election. To enable Replicas to send heartbeats, we utilise Timers. The Primary and backups have separate timer id's. If a backup changes state to Primary, it then cancels the backup timers and enables primaries. Same goes for the other way around. We earlier discussed Atomic Broadcast and Leader Election in section 3.1 and 3.3, now lets look at how it relates to the KompicsEvent's that each Replica can send and receive.
 \newline{}\newline{}
 Atomic Broadcast KompicsEvents:
 \begin{lstlisting}[style=myScalastyle]
@@ -133,7 +130,7 @@ The capability of the store to support the fundamental operations such as GET, P
 Linearizability is a correctness condition for concurrent objects that exploits the semantics of abstract data-types. In a linearizable system, every operation seems to execute atomically and instantaneously at some point between its invocation and response. The test for linearizability is implemented as follows: we consider a scenario where a set of servers is started as a cluster along with their corresponding sequential client. The test scenario basically takes as an input a sequential specification and a concurrent history of the operations which are written into a queue. A decision procedure then checks whether the history is linearizable with respect to the specifications. 
 
 \section{Leader Lease}
-When a replica enters the Primary state and the lease option is on, a LeaseRequest is broadcasted to all servers. Once the primary has gotten a majority of LeasePromise's, it enables the so called fast-read mode. As long as \(C(T) - tL < 10*(1-p)\) is satisfied, it can serve GET requests without contacting a majority of replicas. Important thing to note is that we do not use a real clock drift rate, we simulate it with a randomised rate between 0.1-0.2.
+When a replica enters the Primary state and the lease option is on, a LeaseRequest is broadcasted to all replicas. Once the primary has gotten a majority of LeasePromise's, it enables the so called fast-read mode. As long as \(C(T) - tL < 10*(1-p)\) is satisfied, it can serve GET requests without contacting a majority. Important thing to note is that we do not use a real clock drift rate, we simulate it with a randomised rate between 0.1-0.2.
 \newline{}\newline{}
 We did not write test scenarios that interleave reads with writes during a partition. The reason for this is that our implementation is different than Sequence-Paxos/Multi-Paxos in the sense that when a primary is isolated from the rest of the cluster, it will no longer be in contact with a majority of replicas. Hence, GET requests wouldn't be allowed as the replica has entered an election phase. The benchmark was performed by inspecting the real-time of the simulation.
 \begin{figure}[H]
@@ -146,7 +143,7 @@ We did not write test scenarios that interleave reads with writes during a parti
 \section{Contributions}
 
 \begin{itemize}
-	\item{Max Meldrum\newline{}\newline{}Replication protocol, Infrastructure and Broadcast}
+	\item{Max Meldrum\newline{}\newline{}Replication protocol, Infrastructure, Broadcast and Lease.}
 	\item{Vaikunth Srinivasan A\newline{}\newline{}Broadcast and Testing}
 
 \end{itemize}
