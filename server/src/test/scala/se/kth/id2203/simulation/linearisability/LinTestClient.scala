@@ -47,19 +47,19 @@ class LinTestClient extends ComponentDefinition {
   private val pending = mutable.Map.empty[UUID, String]
   val trace = mutable.Queue.empty[Op]
   var traceNo = 0;
-  var oP : Op = new Op(C,"",Some(""))
+  var oP : Op = new Op(CAS,"",Some(""))
   var qMsgID = oP.id
   ctrl uponEvent {
     case _: Start => handle {
       val messages = SimulationResult[Int]("messages")
       for (i <- 0 to messages) {
-        val op = new Op(PUT, s"unit_test$i", Some(s"kth$i"))
-        val routeMsg = RouteMsg(op.key, op) // don't know which partition is responsible, so ask the bootstrap server to forward it
+        val opPUT = new Op(PUT, s"unit_test$i", Some(s"kth$i"))
+        val routeMsg = RouteMsg(opPUT.key, opPUT) // don't know which partition is responsible, so ask the bootstrap server to forward it
         trigger(NetMessage(self, server, routeMsg) -> net)
-        trace.enqueue(op)
-        pending += (op.id -> op.key)
-        logger.info("Sending {}", op)
-        SimulationResult += (op.key -> "Sent")
+        trace.enqueue(opPUT)
+        pending += (opPUT.id -> opPUT.key)
+        logger.info("Sending {}", opPUT)
+        SimulationResult += (opPUT.key -> "Sent")
 
         val opGet = new Op(GET, s"unit_test$i")
         val routeMsg1 = RouteMsg(opGet.key, opGet) // don't know which partition is responsible, so ask the bootstrap server to forward it
@@ -67,12 +67,14 @@ class LinTestClient extends ComponentDefinition {
         trace.enqueue(opGet)
         pending += (opGet.id -> opGet.key)
         logger.info("Sending {}", opGet)
-        SimulationResult += (op.key -> "Sent")
+        SimulationResult += (opGet.key -> "Sent")
       }
-      val op = new Op(QUEUE,"",Some(""))
-      qMsgID = op.id
-      val routeMsg = RouteMsg(op.key, op)
-      trigger(NetMessage(self, server, routeMsg) -> net)
+      for(i <- 0 to messages/2) {
+        val op = new Op(CAS, s"unit_test$i", Some(s"kth$i"))
+        qMsgID = op.id
+        val routeMsg = RouteMsg(op.key, op)
+        trigger(NetMessage(self, server, routeMsg) -> net)
+      }
     }
   }
 
@@ -82,14 +84,16 @@ class LinTestClient extends ComponentDefinition {
      var correctTrace = true
       if(id.equals(qMsgID)){
         val tempTrace = trace.clone()
-        val nTrace = res.get.asInstanceOf[mutable.Queue[Op]]
         for(i <- 0 to SimulationResult[Int]("messages")*2){
           val opr = tempTrace.dequeue()
-          while(!opr.id.equals(nTrace.dequeue().id)){
-            if(nTrace.isEmpty){
+          while(!opr.id.equals(trace.dequeue().id)){
+            if(trace.isEmpty){
               correctTrace = false
-              println("Not Linearizable")
+              log.info("Not Linearizable")
             }
+            else{
+                log.info("Is Linearizable")
+              }
           }
         }
         traceNo = traceNo + 1

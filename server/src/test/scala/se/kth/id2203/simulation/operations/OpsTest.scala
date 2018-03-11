@@ -39,7 +39,7 @@ import scala.concurrent.duration._
 
 class OpsTest extends FlatSpec with Matchers {
 
-  private val nMessages = 10
+  private val nMessages = 4
   private val clusterSize = 9
 
   //  "Classloader" should "be something" in {

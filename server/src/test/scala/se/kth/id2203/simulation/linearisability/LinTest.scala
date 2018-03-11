@@ -39,7 +39,7 @@ import se.sics.kompics.sl.simulator._
 import scala.concurrent.duration._
 
 class LinTest extends FlatSpec with Matchers {
-  private val nMessages = 10
+  private val nMessages = 4
   private val clusterSize = 9
 
   "Linearizability" should "be implemented" in {
@@ -55,6 +55,10 @@ class LinTest extends FlatSpec with Matchers {
       //GET operation
       SimulationResult.get[String](s"unit_test$i") should be (Some(s"kth$i"))
     }
+    for(i <- 0 to nMessages/2){
+      SimulationResult.get[String](s"unit_test$i") should be (Some(s"kth$i"))
+    }
+
   }
 }
 
